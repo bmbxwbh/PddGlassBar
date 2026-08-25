@@ -127,7 +127,21 @@ object GlassBarHooks {
         runCatching {
             val m = tabCls.declaredMethods.first { it.name == "drawCanvas" }
             m.isAccessible = true
-            b.hookAfter(m) { BarState.refreshDots() }
+            b.hookAfter(m) { f ->
+                BarState.refreshDots()
+                // 绘制期压制: 原栏一旦被 PDD 重新设为可见(滚动显隐/换页),
+                // 它必然先经历一次绘制 —— 在此瞬间立刻按回 GONE
+                runCatching {
+                    val v = f.thisObject as? android.view.View ?: return@hookAfter
+                    val p = v.parent as? ViewGroup ?: return@hookAfter
+                    if (p.findViewWithTag<View>(com.pdd.glassbar.ui.GlassOverlay.TAG) != null &&
+                        v.visibility != android.view.View.GONE
+                    ) {
+                        v.visibility = android.view.View.GONE
+                        com.pdd.glassbar.loader.PddLoader.bridge.log("suppress: re-hidden after flip")
+                    }
+                }
+            }
         }.onFailure { b.log(it) }
     }
 }

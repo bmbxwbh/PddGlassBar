@@ -7,6 +7,14 @@ import android.widget.RelativeLayout
 import androidx.compose.ui.platform.ComposeView
 import com.pdd.glassbar.loader.PddLoader
 import com.pdd.glassbar.ui.utils.LifecycleOwnerProvider
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.ViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.lifecycle.ViewTreeViewModelStoreOwner
+import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.ViewTreeSavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.pdd.glassbar.ui.utils.setLifecycleOwner
 import java.io.File
 
@@ -49,28 +57,44 @@ object GlassOverlay {
         // ---- 阶段 1~3 全程保护; 失败即回滚 ----
         var composeView: ComposeView? = null
         try {
-            val owner = activity?.let { LifecycleOwnerProvider.getOrCreate(it) }
+            val ourOwner = activity?.let { LifecycleOwnerProvider.getOrCreate(it) }
                 ?: LifecycleOwnerProvider.lifecycleOwner
+            var effOwner: LifecycleOwner = ourOwner
             log("lifecycle-ok")
+
+            // Recomposer 从 rootView(DecorView) 解析 owner:
+            //  - 宿主已有(如 AppCompatActivity 体系) => 复用宿主的, 零侵入
+            //  - 宿主没有(原生 Activity)          => 才写入我们的桥接 owner
+            runCatching {
+                val decor: android.view.View = activity?.window?.decorView ?: container.rootView
+                val existing = androidx.lifecycle.ViewTreeLifecycleOwner.get(decor)
+                if (existing != null) {
+                    effOwner = existing
+                    if (androidx.lifecycle.ViewTreeViewModelStoreOwner.get(decor) == null &&
+                        ourOwner is ViewModelStoreOwner
+                    ) decor.setViewTreeViewModelStoreOwner(ourOwner)
+                    if (androidx.savedstate.ViewTreeSavedStateRegistryOwner.get(decor) == null &&
+                        ourOwner is SavedStateRegistryOwner
+                    ) decor.setViewTreeSavedStateRegistryOwner(ourOwner)
+                    log("decor-owner-reuse-host")
+                } else {
+                    decor.setLifecycleOwner(ourOwner)
+                    if (ourOwner is ViewModelStoreOwner) decor.setViewTreeViewModelStoreOwner(ourOwner)
+                    if (ourOwner is SavedStateRegistryOwner) decor.setViewTreeSavedStateRegistryOwner(ourOwner)
+                    log("decor-owner-set")
+                }
+            }.onFailure { log("decor-owner-failed") }
 
             composeView = ComposeView(container.context).apply {
                 tag = TAG
                 clipChildren = false
                 clipToPadding = false
-                setLifecycleOwner(owner)
+                setLifecycleOwner(effOwner)
                 setContent { GlassBarHost(sourceView = content) }
             }
             log("compose-created")
 
             originals.forEach { it.visibility = View.GONE }
-
-            // 关键修复: Compose 创建 Recomposer 时检查的是 rootView(DecorView) 上的
-            // ViewTreeLifecycleOwner, 而非 ComposeView 自己 —— 必须提升挂载层级。
-            runCatching {
-                val decor: View = activity?.window?.decorView ?: container.rootView
-                decor.setLifecycleOwner(owner)
-                log("decor-owner-set")
-            }.onFailure { log("decor-owner-failed") }
             container.clipChildren = false
             container.clipToPadding = false
             content.clipChildren = false
@@ -81,11 +105,6 @@ object GlassOverlay {
             ).apply { addRule(RelativeLayout.ALIGN_PARENT_BOTTOM) }
             container.addView(composeView, lp)
             log("attached")
-            // 移除而非 GONE: PDD 滚动显隐逻辑会对原栏 setVisibility(VISIBLE),
-            // 孤儿视图怎么设都不可见; 实例保留(监听器仍被引用), 新实例由挂载守卫拦截
-            var removed = 0
-            originals.forEach { runCatching { container.removeView(it); removed++ } }
-            log("originals-removed=$removed")
         } catch (t: Throwable) {
             // 回滚: 原底栏全部恢复, 半成品移除 —— 宿主零感知
             runCatching {
