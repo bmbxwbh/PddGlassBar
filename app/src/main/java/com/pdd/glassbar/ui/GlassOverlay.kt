@@ -127,7 +127,10 @@ object GlassOverlay {
             }.onFailure { log("harvest-failed") }
 
             // ---- 阶段 4: 隐藏原生三件套 + 关裁剪 + 挂载 ----
-            originals.forEach { it.visibility = View.GONE }
+            originals.forEach {
+                it.visibility = View.GONE
+                BarState.registerHidden(it)
+            }
             container.clipChildren = false
             container.clipToPadding = false
             content.clipChildren = false

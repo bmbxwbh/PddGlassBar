@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -54,6 +55,12 @@ fun GlassBarHost(sourceView: View) {
         },
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
+            LaunchedEffect(Unit) {
+                while (true) {
+                    kotlinx.coroutines.delay(1000)
+                    BarState.reassertHidden()
+                }
+            }
             if (BarState.tabs.isNotEmpty()) FloatingBottomBar(
                 items = BarState.tabs.toList(),
                 selectedIndex = { BarState.selected },
