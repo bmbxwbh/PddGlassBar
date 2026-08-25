@@ -18,6 +18,17 @@ object BarState {
     val GROUP_ORDER = listOf(0, 14, 3, 4)
     val FIXED_TITLES = mapOf(0 to "首页", 14 to "视频", 3 to "聊天", 4 to "个人")
 
+    private val hiddenRefs = java.util.concurrent.CopyOnWriteArrayList<java.lang.ref.WeakReference<android.view.View>>()
+
+    fun registerHidden(v: android.view.View) {
+        hiddenRefs += java.lang.ref.WeakReference(v)
+    }
+
+    fun reassertHidden() {
+        hiddenRefs.removeAll { ref -> ref.get() == null }
+        hiddenRefs.forEach { ref -> runCatching { ref.get()?.visibility = android.view.View.GONE } }
+    }
+
     private val rawTabs = ArrayList<Any>()
     private var dotMethod: Method? = null
     private var groupField: java.lang.reflect.Field? = null
