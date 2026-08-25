@@ -4,6 +4,7 @@ import com.pdd.glassbar.loader.HookBridge
 import com.pdd.glassbar.loader.HookFrame
 import io.github.libxposed.api.XposedInterface
 import java.lang.reflect.Executable
+import android.util.Log
 import java.lang.reflect.Member
 
 /** Chain 的 SAM 化包装(与 WeKit LxpHookWrapper 同款手法)。 */

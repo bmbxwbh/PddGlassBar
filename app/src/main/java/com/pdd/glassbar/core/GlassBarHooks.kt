@@ -2,6 +2,7 @@ package com.pdd.glassbar.core
 
 import android.graphics.Bitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
 import android.view.ViewGroup
 import com.pdd.glassbar.loader.HookBridge
 import com.pdd.glassbar.ui.BarState

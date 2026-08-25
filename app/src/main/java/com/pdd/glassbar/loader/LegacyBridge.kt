@@ -6,16 +6,20 @@ import java.lang.reflect.Member
 
 class LegacyBridge(override val hostClassLoader: ClassLoader) : HookBridge {
 
+    /** 不同年代 api jar 里字段名为 member 或 method, 反射双探。 */
+    private fun XC_MethodHook.MethodHookParam.extractMember(): Member? =
+        runCatching { javaClass.getField("member").get(this) as? Member }
+            .recoverCatching { javaClass.getField("method").get(this) as? Member }
+            .getOrNull()
+
     override fun hookBefore(member: Member, priority: Int, callback: (HookFrame) -> Unit) {
-        // 优先级经 XC_MethodHook 构造器传入 (api-82 的 hookMethod 无 priority 重载)
         XposedBridge.hookMethod(member, object : XC_MethodHook(priority) {
             override fun beforeHookedMethod(param: MethodHookParam) {
-                val frame = HookFrame(null, param.thisObject, param.args)
+                val frame = HookFrame(param.extractMember(), param.thisObject, param.args)
                 runCatching { callback(frame) }.onFailure(::log)
                 if (frame.skipOriginal) {
                     param.result = frame.result
                 } else {
-                    @Suppress("UNCHECKED_CAST")
                     param.args = frame.args
                 }
             }
@@ -29,7 +33,7 @@ class LegacyBridge(override val hostClassLoader: ClassLoader) : HookBridge {
             override fun beforeHookedMethod(param: MethodHookParam) = Unit
 
             override fun afterHookedMethod(param: MethodHookParam) {
-                val frame = HookFrame(null, param.thisObject, param.args)
+                val frame = HookFrame(param.extractMember(), param.thisObject, param.args)
                     .apply { originalResult = param.result }
                 runCatching { callback(frame) }.onFailure(::log)
                 if (frame.result !== HookFrame.UNCHANGED) {
