@@ -38,6 +38,14 @@ object BarState {
 
     private fun baseOf(url: String) = url.substringBefore("?").substringAfterLast("/")
 
+    /** a(tab,Z) 解析出的最终 URL 绑定(按 tab 实例身份关联)。 */
+    class IconBinding(val imageUrl: String?, val gifUrl: String?)
+    private val boundByTab = java.util.concurrent.ConcurrentHashMap<Int, IconBinding>()
+
+    fun bindIconUrl(tab: Any, imageUrl: String?, gifUrl: String?) {
+        boundByTab[System.identityHashCode(tab)] = IconBinding(imageUrl, gifUrl)
+    }
+
     // ---- 原生侧引用(用于把玻璃栏的点击路由回宿主) ----
     private var hostListener: Any? = null
     private var selectMethod: Method? = null
@@ -109,7 +117,35 @@ object BarState {
                 "synced ${mapped.size} tabs: " + mapped.joinToString("|") { "${it.group}:${it.title}" }) }
             if (selected >= mapped.size) selected = 0
             refreshDots()
+            // 清理已不在当前列表中的绑定
+            val live = synchronized(rawTabs) { rawTabs.map { System.identityHashCode(it) } }.toSet()
+            boundByTab.keys.retainAll { it in live }
         }
+    }
+
+    /** 玻璃栏渲染取图标: 绑定 URL 优先, 实体字段与文件名匹配兜底。 */
+    fun resolveIconFor(index: Int, selected: Boolean): ImageBitmap? {
+        // ① 安装期收割的原生位图(首帧即时可用)
+        nativeByIndex[index]?.let { return it }
+        val raw = synchronized(rawTabs) { rawTabs.getOrNull(index) }
+        val binding = raw?.let { boundByTab[System.identityHashCode(it)] }
+        val candidates = buildList {
+            binding?.imageUrl?.let(::add)
+            if (!selected) binding?.gifUrl?.let(::add)
+            tabs.getOrNull(index)?.let {
+                if (selected) { it.selectedUrl?.let(::add); it.normalUrl?.let(::add) }
+                else { it.normalUrl?.let(::add); it.selectedUrl?.let(::add) }
+            }
+        }
+        for (u in candidates) {
+            icons[u]?.let { return it }
+            val bs = baseOf(u)
+            if (bs.isNotEmpty()) {
+                iconsByBase[bs]?.let { return it }
+                icons.entries.firstOrNull { it.key.contains(bs) }?.let { return it }
+            }
+        }
+        return null
     }
 
     /** 每次 PddTabView.drawCanvas 后调用 —— 轻量读取红点状态。 */

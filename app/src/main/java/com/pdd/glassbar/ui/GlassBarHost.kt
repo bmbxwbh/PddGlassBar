@@ -90,7 +90,7 @@ fun GlassBarHost(sourceView: View) {
                             label = "pddTabIcon",
                         ) { sel ->
                             // 三级阶梯: 原生收割 → 运行时捕获 → 内置向量兜底
-                            val native = BarState.nativeIcon(index)
+                            val native = BarState.resolveIconFor(index, sel)
                             when {
                                 native != null -> Image(
                                     bitmap = native,

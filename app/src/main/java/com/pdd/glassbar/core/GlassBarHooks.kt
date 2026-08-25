@@ -19,6 +19,7 @@ object GlassBarHooks {
 
     private const val TAB_VIEW =
         "com.xunmeng.pinduoduo.ui_home_activity.widget.tab.PddTabView"
+    private const val TAB_VIEW_PKG = "com.xunmeng.pinduoduo.ui_home_activity.widget.tab"
     private const val CONTAINER =
         "com.xunmeng.pinduoduo.ui_home_activity.widget.MainFrameContainerView"
 
@@ -119,6 +120,30 @@ object GlassBarHooks {
             b.log("H4 j-hook NOT FOUND — 原生捕获不可用, 将走向量兜底")
             b.log(it)
         }
+
+        // ---- H4b: URL 绑定 —— a(tab, Z) 解析最终 TabIconUrl, 按 tab 实例身份关联 ----
+        runCatching {
+            val entCls = cl.loadClass("com.xunmeng.pinduoduo.home.base.entity.HomeBottomTab")
+            val m = tabCls.declaredMethods.first {
+                it.name == "a" && it.parameterTypes.size == 2 &&
+                    it.parameterTypes[0] == entCls &&
+                    it.parameterTypes[1] == java.lang.Boolean.TYPE &&
+                    it.returnType.name.endsWith(".TabIconUrl")
+            }
+            m.isAccessible = true
+            val rcls = cl.loadClass("$TAB_VIEW_PKG.TabIconUrl")
+            val gi = rcls.getMethod("getImageUrl")
+            val gg = rcls.getMethod("getGifUrl")
+            b.hookAfter(m) { f ->
+                val tab = f.args.getOrNull(0) ?: return@hookAfter
+                val res = f.result ?: return@hookAfter
+                BarState.bindIconUrl(
+                    tab,
+                    runCatching { gi.invoke(res) as? String }.getOrNull(),
+                    runCatching { gg.invoke(res) as? String }.getOrNull(),
+                )
+            }
+        }.onFailure { b.log(it) }
 
         // ---- 换页/换肤压制点: c2() 是 tab 设置最外层(内部 remove/re-add 视图),
         // 结束后所有视图就位 —— 在此统一执行一次最终隐藏
