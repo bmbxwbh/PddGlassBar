@@ -42,15 +42,21 @@ object BarState {
         selected = index.coerceIn(0, (tabs.size - 1).coerceAtLeast(0))
     }
 
-    fun registerHidden(v: View) {
+    /** 彻底隐身: GONE 不占位 + alpha0 防 VISIBLE 翻回瞬帧。 */
+    fun vanish(v: View) {
         v.visibility = View.GONE
+        v.alpha = 0f
+    }
+
+    fun registerHidden(v: View) {
+        vanish(v)
         hiddenRefs += java.lang.ref.WeakReference(v)
     }
 
-    /** 周期性再压制。 */
+    // 周期性再压制(同时恢复 alpha, 防第三方改透明度)。
     fun reassertHidden() {
         hiddenRefs.removeAll { it.get() == null }
-        hiddenRefs.forEach { runCatching { it.get()?.visibility = View.GONE } }
+        hiddenRefs.forEach { runCatching { it.get()?.let(::vanish) } }
     }
 
     private fun ensureProbe(item: Any) {

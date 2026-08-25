@@ -67,7 +67,7 @@ object GlassBarHooks {
                     val tv = f.thisObject as? View
                     val p = tv?.parent as? ViewGroup
                     if (p != null && p.findViewWithTag<View>(GlassOverlay.TAG) != null)
-                        tv.visibility = View.GONE
+                        com.pdd.glassbar.ui.BarState.vanish(tv)
                 }
             }
             ok()
@@ -140,7 +140,7 @@ object GlassBarHooks {
                     val p = v.parent as? ViewGroup ?: return@hookAfter
                     if (p.findViewWithTag<View>(GlassOverlay.TAG) != null &&
                         (v.visibility != View.GONE || v.alpha != 0f)
-                    ) v.visibility = View.GONE
+                    ) com.pdd.glassbar.ui.BarState.vanish(v)
                 }
             }
             ok()
@@ -153,7 +153,7 @@ object GlassBarHooks {
                 b.hookAfter(m) { f ->
                     val v = f.thisObject as? View ?: return@hookAfter
                     val p = v.parent as? ViewGroup ?: return@hookAfter
-                    if (p.findViewWithTag<View>(GlassOverlay.TAG) != null) v.visibility = View.GONE
+                    if (p.findViewWithTag<View>(GlassOverlay.TAG) != null) com.pdd.glassbar.ui.BarState.vanish(v)
                 }
             }
             ok()
@@ -167,7 +167,7 @@ object GlassBarHooks {
                 b.hookAfter(m) { f ->
                     val v = f.thisObject as? View ?: return@hookAfter
                     val p = v.parent as? ViewGroup ?: return@hookAfter
-                    if (p.findViewWithTag<View>(GlassOverlay.TAG) != null) v.visibility = View.GONE
+                    if (p.findViewWithTag<View>(GlassOverlay.TAG) != null) com.pdd.glassbar.ui.BarState.vanish(v)
                 }
             }
             phCls.declaredMethods.firstOrNull { it.name == "onAttachedToWindow" }?.let { m ->
@@ -175,7 +175,7 @@ object GlassBarHooks {
                 b.hookAfter(m) { f ->
                     val v = f.thisObject as? View ?: return@hookAfter
                     val p = v.parent as? ViewGroup ?: return@hookAfter
-                    if (p.findViewWithTag<View>(GlassOverlay.TAG) != null) v.visibility = View.GONE
+                    if (p.findViewWithTag<View>(GlassOverlay.TAG) != null) com.pdd.glassbar.ui.BarState.vanish(v)
                 }
             }
             ok()
