@@ -63,6 +63,14 @@ object GlassOverlay {
             log("compose-created")
 
             originals.forEach { it.visibility = View.GONE }
+
+            // 关键修复: Compose 创建 Recomposer 时检查的是 rootView(DecorView) 上的
+            // ViewTreeLifecycleOwner, 而非 ComposeView 自己 —— 必须提升挂载层级。
+            runCatching {
+                val decor: View = activity?.window?.decorView ?: container.rootView
+                decor.setLifecycleOwner(owner)
+                log("decor-owner-set")
+            }.onFailure { log("decor-owner-failed") }
             container.clipChildren = false
             container.clipToPadding = false
             content.clipChildren = false

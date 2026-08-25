@@ -1,18 +1,16 @@
 package com.pdd.glassbar.ui.utils
 
 import android.view.View
-import androidx.compose.ui.platform.ComposeView
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 
-/** 参数用具体类型 [XposedLifecycleOwner](同 WeKit): 它同时实现三类 Owner, 供扩展函数精确解析。 */
-fun ComposeView.setLifecycleOwner(owner: XposedLifecycleOwner) {
+/** 把三件套 owner 标记打到指定 View(DecorView 或 ComposeView)。 */
+fun View.setLifecycleOwner(owner: LifecycleOwner) {
     setViewTreeLifecycleOwner(owner)
-    setViewTreeViewModelStoreOwner(owner)
-    setViewTreeSavedStateRegistryOwner(owner)
-}
-
-fun View.setLifecycleOwnerCompat(owner: XposedLifecycleOwner) {
-    setViewTreeLifecycleOwner(owner)
+    if (owner is ViewModelStoreOwner) setViewTreeViewModelStoreOwner(owner)
+    if (owner is SavedStateRegistryOwner) setViewTreeSavedStateRegistryOwner(owner)
 }
