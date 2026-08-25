@@ -82,7 +82,6 @@ fun GlassBarHost(sourceView: View) {
                 liquidGlassBlurRadius = 18.dp,
                 dynamicGravityHighlight = true,
                 iconContent = { item, index ->
-                    @Suppress("UNUSED_EXPRESSION") BarState.iconTick // 订阅收割/捕获更新
                     val isSelected = index == BarState.selected
                     BadgedBox(
                         badge = {
@@ -96,21 +95,11 @@ fun GlassBarHost(sourceView: View) {
                             animationSpec = tween(200),
                             label = "pddTabIcon",
                         ) { sel ->
-                            // 三级阶梯: 原生收割 → 运行时捕获 → 内置向量兜底
-                            val native = BarState.resolveIconFor(index, sel)
-                            when {
-                                native != null -> Image(
-                                    bitmap = native,
-                                    contentDescription = item.title,
-                                    modifier = Modifier.size(26.dp),
-                                    contentScale = ContentScale.Fit,
-                                )
-                                else -> Icon(
-                                    imageVector = PddIcons.icon(item.group, sel),
-                                    contentDescription = item.title,
-                                    modifier = Modifier.size(26.dp),
-                                )
-                            }
+                            Icon(
+                                imageVector = PddIcons.icon(item.group, sel),
+                                contentDescription = item.title,
+                                modifier = Modifier.size(26.dp),
+                            )
                         }
                     }
                 },
