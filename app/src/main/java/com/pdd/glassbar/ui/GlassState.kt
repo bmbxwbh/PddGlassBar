@@ -76,7 +76,9 @@ object BarState {
             if (g in GROUP_ORDER) Item(t, g) else null
         }
         val ordered = GROUP_ORDER.mapNotNull { g -> items.firstOrNull { it.group == g } }
-
+        runCatching { com.pdd.glassbar.loader.PddLoader.bridge.log(
+            "filter in=" + rawList.size + " out=" + ordered.size +
+            " groups=" + ordered.joinToString(",") { it.group.toString() }) }
         // 同步 UI 状态
         tabs.clear()
         ordered.forEach { tabs.add(TabUi(FIXED_TITLES[it.group] ?: "Tab", it.group)) }
