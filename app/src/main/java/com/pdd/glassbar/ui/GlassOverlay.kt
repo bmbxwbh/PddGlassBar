@@ -7,6 +7,7 @@ import android.widget.RelativeLayout
 import androidx.compose.ui.platform.ComposeView
 import com.pdd.glassbar.loader.PddLoader
 import com.pdd.glassbar.ui.utils.LifecycleOwnerProvider
+import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.ViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
