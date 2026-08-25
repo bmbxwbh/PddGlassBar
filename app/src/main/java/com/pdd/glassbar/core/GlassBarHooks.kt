@@ -30,9 +30,14 @@ object GlassBarHooks {
         // ---- H1: 注入玻璃栏 overlay(双锚点: initView + 构造器兜底) ----
         fun trigger(obj: Any?) {
             val container = obj as? ViewGroup ?: return
+            // 延迟到本轮消息循环之后: 避开 PDD 构造/initView 期间的子视图索引与接线窗口
             runCatching {
-                GlassOverlay.install(container, tabCls, container.context.findActivity())
-            }.onFailure { b.log(it) }
+                container.post {
+                    runCatching {
+                        GlassOverlay.install(container, tabCls, container.context.findActivity())
+                    }.onFailure { b.log(it) }
+                }
+            }
         }
         runCatching {
             val m = containerCls.getDeclaredMethod("initView")

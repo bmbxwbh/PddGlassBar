@@ -26,15 +26,24 @@ object GlassOverlay {
     const val TAG = "pdd_glass_bar_compose"
     private val KILL_SWITCH = File("/sdcard/pddglassbar.disable")
 
-    // ---- ViewTree owner 读取(直读 tag, 规避 lifecycle 2.11 API 迁移) ----
+    // ---- ViewTree owner 读取: 运行时反射解析库内资源 id ----
+    // (非传递 R 类下无法直接引用 androidx.*.R; 反射取到的最终值与库写入方一致)
+    private val KEY_LIFECYCLE by lazy { idOf("androidx.lifecycle", "view_tree_lifecycle_owner") }
+    private val KEY_VM by lazy { idOf("androidx.lifecycle", "view_tree_view_model_store_owner") }
+    private val KEY_SAVED_STATE by lazy { idOf("androidx.savedstate", "view_tree_saved_state_registry_owner") }
+
+    private fun idOf(pkg: String, name: String): Int = runCatching {
+        Class.forName("$pkg.R$id").fields.first { it.name == name }.getInt(null)
+    }.getOrDefault(-1)
+
     private fun View.tagLifecycleOwner(): LifecycleOwner? =
-        getTag(androidx.lifecycle.R.id.view_tree_lifecycle_owner) as? LifecycleOwner
+        getTag(KEY_LIFECYCLE) as? LifecycleOwner
 
     private fun View.tagVmOwner(): ViewModelStoreOwner? =
-        getTag(androidx.lifecycle.R.id.view_tree_view_model_store_owner) as? ViewModelStoreOwner
+        getTag(KEY_VM) as? ViewModelStoreOwner
 
     private fun View.tagSavedStateOwner(): SavedStateRegistryOwner? =
-        getTag(androidx.savedstate.R.id.view_tree_saved_state_registry_owner) as? SavedStateRegistryOwner
+        getTag(KEY_SAVED_STATE) as? SavedStateRegistryOwner
 
     fun install(container: ViewGroup, tabCls: Class<*>, activity: Activity?) {
         val log = { stage: String -> runCatching { PddLoader.bridge.log("install/$stage") } }
