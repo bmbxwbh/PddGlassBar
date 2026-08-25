@@ -2,14 +2,14 @@ package com.pdd.glassbar.ui
 
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.composables.icons.materialsymbols.MaterialSymbols
-import com.composables.icons.materialsymbols.Assignment
-import com.composables.icons.materialsymbols.Chat
-import com.composables.icons.materialsymbols.Explore
-import com.composables.icons.materialsymbols.Favorite
-import com.composables.icons.materialsymbols.Home
-import com.composables.icons.materialsymbols.Person
-import com.composables.icons.materialsymbols.Star
-import com.composables.icons.materialsymbols.Videocam
+import com.composables.icons.materialsymbols.outlined.Assignment
+import com.composables.icons.materialsymbols.outlined.Chat
+import com.composables.icons.materialsymbols.outlined.Explore
+import com.composables.icons.materialsymbols.outlined.Favorite
+import com.composables.icons.materialsymbols.outlined.Home
+import com.composables.icons.materialsymbols.outlined.Person
+import com.composables.icons.materialsymbols.outlined.Star
+import com.composables.icons.materialsymbols.outlined.Videocam
 import com.composables.icons.materialsymbols.outlinedfilled.Assignment as FAssignment
 import com.composables.icons.materialsymbols.outlinedfilled.Chat as FChat
 import com.composables.icons.materialsymbols.outlinedfilled.Explore as FExplore
