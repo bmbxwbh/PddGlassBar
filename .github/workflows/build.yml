@@ -32,10 +32,10 @@ jobs:
         with:
           gradle-version: '9.7.0'
 
-      - name: Install Android SDK components
-        run: |
-          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
-          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37"
+      # 只负责接受许可证; 平台/构建工具由 AGP 自动供应
+      # (与 WeKit CI 一致 —— 手动安装 platforms;android-N 在包未发布时会导致整个 job 失败)
+      - name: Accept Android SDK licenses
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
 
       - name: Build standard + legacy flavors
         run: >
