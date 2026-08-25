@@ -1,7 +1,7 @@
 package com.pdd.glassbar.core
 
 import android.graphics.Bitmap
-import androidx.compose.ui.graphics.asImageBitmap
+import android.view.View
 import androidx.compose.ui.graphics.asImageBitmap
 import android.view.ViewGroup
 import com.pdd.glassbar.loader.HookBridge
@@ -57,7 +57,7 @@ object GlassBarHooks {
                 // 皮肤刷新流程会重新 add 新的 PddTabView —— 每次同步时强制再隐藏一次
                 runCatching {
                     val tv = f.thisObject as? android.view.View
-                    val p = tv?.parent as? ViewGroup ?: return
+                    val p = tv?.parent as? ViewGroup ?: return@hookBefore
                     if (p.findViewWithTag<View>(com.pdd.glassbar.ui.GlassOverlay.TAG) != null) {
                         tv.visibility = View.GONE
                         for (i in 0 until p.childCount) {
