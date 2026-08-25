@@ -62,7 +62,7 @@ fun GlassBarHost(sourceView: View) {
                             WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
                     ),
                 backdrop = rememberViewBackdrop(sourceView, LocalLifecycleOwner.current),
-                mode = FloatingBottomBarMode.LiquidGlass,
+                mode = if (GlassFlags.glass) FloatingBottomBarMode.LiquidGlass else FloatingBottomBarMode.None,
                 colors = FloatingBottomBarDefaults.colors(
                     containerColor = if (dark) DARK_BG else LIGHT_BG,
                     indicatorColor = PDD_RED,
@@ -72,6 +72,7 @@ fun GlassBarHost(sourceView: View) {
                 liquidGlassBlurRadius = 18.dp,
                 dynamicGravityHighlight = true,
                 iconContent = { item, index ->
+                    if (!GlassFlags.icons) { Box(Modifier.size(26.dp)); return@FloatingBottomBar }
                     @Suppress("UNUSED_EXPRESSION")
                     ticks // 订阅图标缓存更新
 

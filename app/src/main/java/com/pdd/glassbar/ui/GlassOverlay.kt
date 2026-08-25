@@ -24,7 +24,9 @@ object GlassOverlay {
 
     fun install(container: ViewGroup, tabCls: Class<*>, activity: Activity?) {
         val log = { stage: String -> runCatching { PddLoader.bridge.log("install/$stage") } }
-        if (KILL_SWITCH.exists()) { log("kill-switch-on/skip"); return }
+        runCatching { CrashCapture.install(container.context) }
+        val flag = GlassFlags.load(KILL_SWITCH)
+        if (flag != "on" && flag != "noglass" && flag != "noicons") { log("kill-switch($flag)/skip"); return }
         if (container.findViewWithTag<View>(TAG) != null) return
         runCatching { PddLoader.bridge.log("install/entered") }
 
