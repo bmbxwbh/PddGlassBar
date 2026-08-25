@@ -111,6 +111,26 @@ object GlassBarHooks {
             }
         }.onFailure { b.log(it) }
 
+        // ---- 换页/换肤压制点: c2() 是 tab 设置最外层(内部 remove/re-add 视图),
+        // 结束后所有视图就位 —— 在此统一执行一次最终隐藏
+        runCatching {
+            val c2 = tabCls.getDeclaredMethod("c2")
+            c2.isAccessible = true
+            b.hookAfter(c2) { f ->
+                val v = f.thisObject as? android.view.View ?: return@hookAfter
+                val p = v.parent as? ViewGroup ?: return@hookAfter
+                if (p.findViewWithTag<View>(com.pdd.glassbar.ui.GlassOverlay.TAG) != null) {
+                    v.visibility = android.view.View.GONE
+                    for (i in 0 until p.childCount) {
+                        val c = p.getChildAt(i)
+                        if (c.javaClass.name.endsWith("PddTabPlaceholderLayout")) {
+                            c.visibility = android.view.View.GONE
+                        }
+                    }
+                }
+            }
+        }.onFailure { b.log(it) }
+
         // ---- 新实例守卫: 任何 PddTabView 在已注入容器内挂载时立即隐藏 ----
         runCatching {
             val m = tabCls.methods.first { it.name == "onAttachedToWindow" }
