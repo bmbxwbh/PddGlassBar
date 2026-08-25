@@ -52,6 +52,7 @@ object GlassOverlay {
         val flag = GlassFlags.load(KILL_SWITCH)
         if (flag != "on" && flag != "noglass" && flag != "noicons") { log("kill-switch($flag)/skip"); return }
         if (container.findViewWithTag<View>(TAG) != null) return
+        runCatching { com.pdd.glassbar.ui.ModuleFileLog.init(container.context) }
         runCatching { CrashCapture.install(container.context) }
 
         // ---- 阶段 0: 子视图分类(只读) ----

@@ -2,6 +2,7 @@ package com.pdd.glassbar.loader.entry.lxp
 
 import com.pdd.glassbar.loader.HookBridge
 import com.pdd.glassbar.loader.HookFrame
+import com.pdd.glassbar.ui.ModuleFileLog
 import io.github.libxposed.api.XposedInterface
 import java.lang.reflect.Executable
 import android.util.Log
@@ -44,6 +45,7 @@ class LxpBridge(
     }
 
     override fun log(message: String) {
+        ModuleFileLog.write(message)
         try { self.log(android.util.Log.INFO, "PddGlassBar", message, null) } catch (_: Throwable) {}
     }
 }

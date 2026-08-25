@@ -1,5 +1,6 @@
 package com.pdd.glassbar.loader
 
+import com.pdd.glassbar.ui.ModuleFileLog
 import de.robv.android.xposed.XC_MethodHook
 import de.robv.android.xposed.XposedBridge
 import java.lang.reflect.Member
@@ -46,5 +47,6 @@ class LegacyBridge(override val hostClassLoader: ClassLoader) : HookBridge {
 
     override fun log(message: String) {
         XposedBridge.log("[PddGlassBar] $message")
+        ModuleFileLog.write(message)
     }
 }
