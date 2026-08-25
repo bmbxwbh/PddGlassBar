@@ -26,6 +26,7 @@ object GlassOverlay {
         val log = { stage: String -> runCatching { PddLoader.bridge.log("install/$stage") } }
         if (KILL_SWITCH.exists()) { log("kill-switch-on/skip"); return }
         if (container.findViewWithTag<View>(TAG) != null) return
+        runCatching { PddLoader.bridge.log("install/entered") }
 
         // ---- 阶段 0: 分类子视图(只读, 不可能崩) ----
         var sourceView: ViewGroup? = null

@@ -51,7 +51,8 @@ object PddLoader {
         }
         try {
             GlassBarHooks.install(b)
-            b.log("PddGlassBar: hooks installed")
+            val proc = runCatching { android.app.Application.getProcessName() }.getOrNull() ?: "?"
+            b.log("hooks installed (process=$proc)")
         } catch (t: Throwable) {
             b.log(t)
         }

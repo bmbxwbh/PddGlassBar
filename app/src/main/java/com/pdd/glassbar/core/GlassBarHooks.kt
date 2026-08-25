@@ -27,14 +27,24 @@ object GlassBarHooks {
         val tabCls = cl.loadClass(TAB_VIEW)
         val containerCls = cl.loadClass(CONTAINER)
 
-        // ---- H1: MainFrameContainerView.initView 之后注入玻璃栏 overlay ----
+        // ---- H1: 注入玻璃栏 overlay(双锚点: initView + 构造器兜底) ----
+        val trigger: (Any?) -> Unit = { obj ->
+            val container = obj as? ViewGroup ?: return
+            runCatching {
+                GlassOverlay.install(container, tabCls, container.context.findActivity())
+            }.onFailure { b.log(it) }
+        }
         runCatching {
             val m = containerCls.getDeclaredMethod("initView")
             m.isAccessible = true
-            b.hookAfter(m) { f ->
-                val container = f.thisObject as? ViewGroup ?: return@hookAfter
-                // 容器的 context 即 HomeActivity(带主题), 直接用于 ComposeView
-                GlassOverlay.install(container, tabCls, container.context.findActivity())
+            b.hookAfter(m) { f -> trigger(f.thisObject) }
+        }.onFailure { b.log(it) }
+        runCatching {
+            containerCls.declaredConstructors.forEach { c ->
+                runCatching {
+                    c.isAccessible = true
+                    b.hookAfter(c) { f -> trigger(f.thisObject) }
+                }
             }
         }.onFailure { b.log(it) }
 
