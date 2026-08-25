@@ -18,8 +18,8 @@ android {
         applicationId = libs.versions.namespace.get()
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
     }
 
     // 与 WeKit 相同的双入口布局:
@@ -88,6 +88,8 @@ dependencies {
 
     implementation(libs.miuix.blur)
     implementation(libs.miuix.shader)
+    implementation(libs.symbols.outlined)
+    implementation(libs.symbols.filled)
 
     compileOnly(libs.libxposed.api)
     implementation(libs.libxposed.service)

@@ -10,6 +10,7 @@ annotation = "1.10.0"
 jetbrains-annotations = "26.0.2"
 libxposed = "102.0.0"
 miuix = "0.9.4-rc01"
+composablehorizons-symbols = "2.2.1"
 
 namespace = "com.pdd.glassbar"
 minSdk = "28"
@@ -38,6 +39,8 @@ miuix-shader = { module = "top.yukonga.miuix.kmp:miuix-shader-android", version.
 libxposed-api = { module = "io.github.libxposed:api", version.ref = "libxposed" }
 libxposed-service = { module = "io.github.libxposed:service", version.ref = "libxposed" }
 legacyxposed-api = { module = "de.robv.android.xposed:api", version = "82" }
+symbols-outlined = { module = "com.composables:icons-material-symbols-outlined-cmp", version.ref = "composablehorizons-symbols" }
+symbols-filled = { module = "com.composables:icons-material-symbols-outlined-filled-cmp", version.ref = "composablehorizons-symbols" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

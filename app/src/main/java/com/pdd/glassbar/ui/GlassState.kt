@@ -64,6 +64,7 @@ object BarState {
 
     /** H2: setTabs 拦截 —— 服务端每次下发都重新同步。 */
     fun syncTabs(rawList: List<Any?>?, loader: ClassLoader? = null) {
+        runCatching { com.pdd.glassbar.loader.PddLoader.bridge.log("syncTabs size=${rawList?.size ?: -1}") }
         if (rawList.isNullOrEmpty()) return
         synchronized(rawTabs) {
             rawTabs.clear()
@@ -85,7 +86,8 @@ object BarState {
             t ?: return@mapNotNull null
             runCatching {
                 TabUi(
-                    title = titleF?.get(t) as? String ?: "",
+                    title = (titleF?.get(t) as? String)?.takeIf { it.isNotBlank() }
+                        ?: PddIcons.titleFallback((groupF?.get(t) as? Number)?.toInt() ?: -1) ?: "Tab",
                     normalUrl = imageF?.get(t) as? String,
                     selectedUrl = imageSelF?.get(t) as? String,
                     group = (groupF?.get(t) as? Number)?.toInt() ?: -1,
@@ -94,7 +96,8 @@ object BarState {
         }
         if (mapped != tabs.toList()) {
             tabs.clear(); tabs.addAll(mapped)
-            if (selected >= mapped.size) selected = 0
+            runCatching { com.pdd.glassbar.loader.PddLoader.bridge.log(
+                "synced ${mapped.size} tabs: " + mapped.joinToString("|") { "${it.group}:${it.title}" }) }            if (selected >= mapped.size) selected = 0
             refreshDots()
         }
     }

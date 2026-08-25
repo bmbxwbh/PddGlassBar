@@ -1,7 +1,9 @@
 package com.pdd.glassbar.ui
 
 import android.view.View
-import androidx.compose.foundation.Image
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.material3.Icon
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -72,13 +74,7 @@ fun GlassBarHost(sourceView: View) {
                 liquidGlassBlurRadius = 18.dp,
                 dynamicGravityHighlight = true,
                 iconContent = { item, index ->
-                    if (!GlassFlags.icons) { Box(Modifier.size(26.dp)); return@FloatingBottomBar }
-                    @Suppress("UNUSED_EXPRESSION")
-                    ticks // 订阅图标缓存更新
-
                     val isSelected = index == BarState.selected
-                    val url = if (isSelected) item.selectedUrl ?: item.normalUrl else item.normalUrl
-                    val bmp = BarState.resolveIcon(url)
                     BadgedBox(
                         badge = {
                             if (!isSelected && BarState.dots.getOrNull(index) == true) {
@@ -86,16 +82,16 @@ fun GlassBarHost(sourceView: View) {
                             }
                         },
                     ) {
-                        if (bmp != null) {
-                            Image(
-                                bitmap = bmp,
+                        Crossfade(
+                            targetState = isSelected,
+                            animationSpec = tween(200),
+                            label = "pddTabIcon",
+                        ) { sel ->
+                            Icon(
+                                imageVector = PddIcons.icon(item.group, sel),
                                 contentDescription = item.title,
                                 modifier = Modifier.size(26.dp),
-                                contentScale = ContentScale.Fit,
                             )
-                        } else {
-                            // 图标尚未加载完成时的占位(仅首帧极短)
-                            Box(Modifier.size(26.dp))
                         }
                     }
                 },

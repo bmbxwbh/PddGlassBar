@@ -81,6 +81,11 @@ object GlassOverlay {
             ).apply { addRule(RelativeLayout.ALIGN_PARENT_BOTTOM) }
             container.addView(composeView, lp)
             log("attached")
+            // 移除而非 GONE: PDD 滚动显隐逻辑会对原栏 setVisibility(VISIBLE),
+            // 孤儿视图怎么设都不可见; 实例保留(监听器仍被引用), 新实例由挂载守卫拦截
+            var removed = 0
+            originals.forEach { runCatching { container.removeView(it); removed++ } }
+            log("originals-removed=$removed")
         } catch (t: Throwable) {
             // 回滚: 原底栏全部恢复, 半成品移除 —— 宿主零感知
             runCatching {
