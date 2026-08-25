@@ -142,7 +142,7 @@ object BarState {
             val bs = baseOf(u)
             if (bs.isNotEmpty()) {
                 iconsByBase[bs]?.let { return it }
-                icons.entries.firstOrNull { it.key.contains(bs) }?.let { return it }
+                icons.entries.firstOrNull { it.key.contains(bs) }?.let { return it.value }
             }
         }
         return null

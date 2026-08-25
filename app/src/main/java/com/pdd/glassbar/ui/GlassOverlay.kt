@@ -5,6 +5,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.RelativeLayout
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
@@ -33,7 +34,8 @@ object GlassOverlay {
     private val KEY_SAVED_STATE by lazy { idOf("androidx.savedstate", "view_tree_saved_state_registry_owner") }
 
     private fun idOf(pkg: String, name: String): Int = runCatching {
-        Class.forName("$pkg.R$id").fields.first { it.name == name }.getInt(null)
+        val fq = pkg + ".R$" + name
+        Class.forName(fq).fields.first { it.name == name }.getInt(null)
     }.getOrDefault(-1)
 
     private fun View.tagLifecycleOwner(): LifecycleOwner? =
@@ -109,7 +111,7 @@ object GlassOverlay {
             // ---- 阶段 3: 收割原生图标(必须在隐藏前, 此时 Drawable 已就位) ----
             runCatching {
                 var n = 0
-                originals.forEach { sv ->
+                originals.filterIsInstance<ViewGroup>().forEach { sv ->
                     collectImageViews(sv).forEach { iv ->
                         val d = iv.drawable ?: return@forEach
                         val w = d.intrinsicWidth.takeIf { it > 0 } ?: 64
@@ -117,7 +119,7 @@ object GlassOverlay {
                         val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
                         val c = android.graphics.Canvas(bmp)
                         d.setBounds(0, 0, w, h)
-                        c.draw(d)
+                        d.draw(c)
                         BarState.putNativeIcon(n++, bmp.asImageBitmap())
                     }
                 }
