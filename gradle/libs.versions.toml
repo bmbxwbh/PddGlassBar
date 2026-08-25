@@ -19,7 +19,7 @@ compileSdkMinor = "0"
 jdk = "21"
 
 [libraries]
-androidx-annotation = { group = "androidx.annotation", name = "androidx.annotation", version.ref = "annotation" }
+androidx-annotation = { group = "androidx.annotation", name = "annotation", version.ref = "annotation" }
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version = "1.19.0" }
 jetbrains-annotations = { group = "org.jetbrains", name = "annotations", version.ref = "jetbrains-annotations" }
 androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }
