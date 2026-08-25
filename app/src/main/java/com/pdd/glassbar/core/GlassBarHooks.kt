@@ -56,7 +56,7 @@ object GlassBarHooks {
                     val tv = f.thisObject as? View ?: return@hookBefore
                     val p = tv.parent as? ViewGroup ?: return@hookBefore
                     if (p.findViewWithTag<View>(com.pdd.glassbar.ui.GlassOverlay.TAG) != null)
-                        tv.visibility = View.GONE
+                        com.pdd.glassbar.ui.BarState.vanish(tv)
                 }
             }
         }.onFailure { b.log(it) }
@@ -91,8 +91,8 @@ object GlassBarHooks {
                     val v = f.thisObject as? View ?: return@hookAfter
                     val p = v.parent as? ViewGroup ?: return@hookAfter
                     if (p.findViewWithTag<View>(com.pdd.glassbar.ui.GlassOverlay.TAG) != null &&
-                        v.visibility != View.GONE
-                    ) v.visibility = View.GONE
+                        (v.visibility != View.GONE || v.alpha != 0f)
+                    ) com.pdd.glassbar.ui.BarState.vanish(v)
                 }
             }
         }.onFailure { b.log(it) }
@@ -104,9 +104,9 @@ object GlassBarHooks {
                 val v = f.thisObject as? View ?: return@hookAfter
                 val p = v.parent as? ViewGroup ?: return@hookAfter
                 if (p.findViewWithTag<View>(com.pdd.glassbar.ui.GlassOverlay.TAG) != null)
-                    v.visibility = View.GONE
-            }
-        }.onFailure { b.log(it) }
+                    com.pdd.glassbar.ui.BarState.vanish(v)
+                }
+            }.onFailure { b.log(it) }
 
         // ---- 骨架屏压制 ----
         runCatching {
@@ -119,7 +119,7 @@ object GlassBarHooks {
                     val v = f.thisObject as? View ?: return@hookAfter
                     val p = v.parent as? ViewGroup ?: return@hookAfter
                     if (p.findViewWithTag<View>(com.pdd.glassbar.ui.GlassOverlay.TAG) != null)
-                        v.visibility = View.GONE
+                        com.pdd.glassbar.ui.BarState.vanish(v)
                 }
             }
             phCls.methods.firstOrNull { it.name == "onAttachedToWindow" }?.let {
@@ -127,7 +127,7 @@ object GlassBarHooks {
                     val v = f.thisObject as? View ?: return@hookAfter
                     val p = v.parent as? ViewGroup ?: return@hookAfter
                     if (p.findViewWithTag<View>(com.pdd.glassbar.ui.GlassOverlay.TAG) != null)
-                        v.visibility = View.GONE
+                        com.pdd.glassbar.ui.BarState.vanish(v)
                 }
             }
         }.onFailure { b.log(it) }

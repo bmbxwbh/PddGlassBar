@@ -20,13 +20,20 @@ object BarState {
 
     private val hiddenRefs = java.util.concurrent.CopyOnWriteArrayList<java.lang.ref.WeakReference<android.view.View>>()
 
+    /** 彻底隐身: GONE(不占位) + alpha0(可见性翻回也不可见, 消除瞬帧)。 */
+    fun vanish(v: android.view.View) {
+        v.visibility = android.view.View.GONE
+        v.alpha = 0f
+    }
+
     fun registerHidden(v: android.view.View) {
+        vanish(v)
         hiddenRefs += java.lang.ref.WeakReference(v)
     }
 
     fun reassertHidden() {
         hiddenRefs.removeAll { ref -> ref.get() == null }
-        hiddenRefs.forEach { ref -> runCatching { ref.get()?.visibility = android.view.View.GONE } }
+        hiddenRefs.forEach { ref -> runCatching { ref.get()?.let(::vanish) } }
     }
 
     private val rawTabs = ArrayList<Any>()
