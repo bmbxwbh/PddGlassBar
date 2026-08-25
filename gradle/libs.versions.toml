@@ -1,0 +1,40 @@
+# 版本与 WeKit 保持一致(libxposed 102 / miuix 0.9.4-rc01 / compose BOM 2026.08.00)
+[versions]
+agp = "9.3.1"
+kotlin = "2.4.10"
+compose-bom = "2026.08.00"
+compose-material3 = "1.5.0-alpha26"
+lifecycle-runtime = "2.11.0"
+activity = "1.13.0"
+annotation = "1.10.0"
+jetbrains-annotations = "26.0.2"
+libxposed = "102.0.0"
+miuix = "0.9.4-rc01"
+
+namespace = "com.pdd.glassbar"
+minSdk = "28"
+targetSdk = "37"
+compileSdk = "37"
+compileSdkMinor = "0"
+jdk = "21"
+
+[libraries]
+androidx-annotation = { group = "androidx.annotation", name = "androidx.annotation", version.ref = "annotation" }
+androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version = "1.19.0" }
+jetbrains-annotations = { group = "org.jetbrains", name = "annotations", version.ref = "jetbrains-annotations" }
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose-bom" }
+androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
+androidx-compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
+androidx-compose-runtime = { group = "androidx.compose.runtime", name = "runtime" }
+androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "compose-material3" }
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycle-runtime" }
+androidx-lifecycle-runtime-compose = { group = "androidx.lifecycle", name = "lifecycle-runtime-compose", version.ref = "lifecycle-runtime" }
+miuix-blur = { module = "top.yukonga.miuix.kmp:miuix-blur-android", version.ref = "miuix" }
+miuix-shader = { module = "top.yukonga.miuix.kmp:miuix-shader-android", version.ref = "miuix" }
+libxposed-api = { module = "io.github.libxposed:api", version.ref = "libxposed" }
+libxposed-service = { module = "io.github.libxposed:service", version.ref = "libxposed" }
+legacyxposed-api = { module = "de.robv.android.xposed:api", version = "82" }
+
+[plugins]
+android-application = { id = "com.android.application", version.ref = "agp" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }

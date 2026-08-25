@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">PDD 玻璃底栏</string>
+    <string name="xposed_description">将拼多多首页底栏替换为悬浮液态玻璃底栏 (miuix-blur)</string>
+</resources>
