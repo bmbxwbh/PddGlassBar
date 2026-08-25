@@ -50,7 +50,7 @@ object BarState {
     }
 
     /** H2: setTabs 拦截 —— 服务端每次下发都重新同步。 */
-    fun syncTabs(rawList: List<Any?>?) {
+    fun syncTabs(rawList: List<Any?>?, loader: ClassLoader? = null) {
         if (rawList.isNullOrEmpty()) return
         synchronized(rawTabs) {
             rawTabs.clear()

@@ -78,13 +78,13 @@ object GlassBarHooks {
             }
             m.isAccessible = true
             b.hookAfter(m) { f ->
-                val url = f.args.getOrNull(1) as? String ?: return
-                val src = f.args.getOrNull(2) as? Bitmap ?: return
-                if (src.isRecycled) return
+                val url = f.args.getOrNull(1) as? String ?: return@hookAfter
+                val src = f.args.getOrNull(2) as? Bitmap ?: return@hookAfter
+                if (src.isRecycled) return@hookAfter
                 // 深拷贝: 宿主图片库可能随时回收原位图, 引用原对象会在玻璃栏绘制时崩溃
                 val safe = runCatching {
                     src.copy(android.graphics.Bitmap.Config.ARGB_8888, false)?.asImageBitmap()
-                }.getOrNull() ?: return
+                }.getOrNull() ?: return@hookAfter
                 BarState.putIcon(url, safe)
             }
         }.onFailure { b.log(it) }
