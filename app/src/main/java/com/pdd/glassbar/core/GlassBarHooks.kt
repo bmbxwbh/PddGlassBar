@@ -10,7 +10,9 @@ import java.lang.reflect.Proxy
 
 /**
  * 固定四页模式 Hook 安装器。
- * H1 注入 / H2 过滤+回传 setTabs / H3 监听器代理 / 压制守卫组。
+ * 钩子清单:
+ *  1 initView 注入      2 setTabs 过滤回传     3 g_1 监听器代理
+ *  4 drawCanvas 压制+红点    5 tab 挂载守卫        6/7 骨架屏压制
  */
 object GlassBarHooks {
 
@@ -26,7 +28,14 @@ object GlassBarHooks {
         val containerCls = cl.loadClass(CONTAINER)
         var hookIdx = 0
 
-        // ---- H1: 容器就绪后注入(延迟到本轮消息循环之后) ----
+        fun ok() {
+            hookIdx++; b.log("hook/$hookIdx ok")
+        }
+        fun fail(name: String, t: Throwable) {
+            b.log("hook/$name FAILED"); b.log(t)
+        }
+
+        // ---- 1 initView 注入(延迟到本轮消息循环之后) ----
         runCatching {
             val m = containerCls.getDeclaredMethod("initView")
             m.isAccessible = true
@@ -35,15 +44,17 @@ object GlassBarHooks {
                 container.post {
                     runCatching {
                         GlassOverlay.install(container, tabCls, container.context.findActivity())
-                    }.onSuccess { hookIdx++; b.log("hook/" + hookIdx + " ok") }.onFailure { e -> b.log("hook/" + (hookIdx + 1) + " FAILED"); b.log(e) }
+                    }.onFailure { b.log(it) }
                 }
             }
-        }.onSuccess { hookIdx++; b.log("hook/" + hookIdx + " ok") }.onFailure { e -> b.log("hook/" + (hookIdx + 1) + " FAILED"); b.log(e) }
+            ok()
+        }.onFailure { fail("initView", it) }
 
-        // ---- H2: setTabs 过滤 —— 精确锁定泛型含 HomeBottomTab 的重载 ----
+        // ---- 2 setTabs 过滤回传 ----
         runCatching {
             val m = tabCls.methods.filter { it.name == "setTabs" }.firstOrNull { mi ->
-                runCatching { mi.genericParameterTypes.joinToString().contains("HomeBottomTab") }.getOrDefault(false)
+                runCatching { mi.genericParameterTypes.joinToString().contains("HomeBottomTab") }
+                    .getOrDefault(false)
             } ?: tabCls.methods.first { it.name == "setTabs" }
             b.hookBefore(m) { f ->
                 @Suppress("UNCHECKED_CAST")
@@ -52,17 +63,17 @@ object GlassBarHooks {
                     f.member?.javaClass?.classLoader ?: b.hostClassLoader,
                 )
                 f.args[0] = filtered
-                // 原生栏同步时顺带压制
                 runCatching {
-                    val tv = f.thisObject as? View ?: return@hookBefore
-                    val p = tv.parent as? ViewGroup ?: return@hookBefore
-                    if (p.findViewWithTag<View>(com.pdd.glassbar.ui.GlassOverlay.TAG) != null)
-                        com.pdd.glassbar.ui.BarState.vanish(tv)
+                    val tv = f.thisObject as? View
+                    val p = tv?.parent as? ViewGroup
+                    if (p != null && p.findViewWithTag<View>(GlassOverlay.TAG) != null)
+                        BarState.vanish(tv)
                 }
             }
-        }.onSuccess { hookIdx++; b.log("hook/" + hookIdx + " ok") }.onFailure { e -> b.log("hook/" + (hookIdx + 1) + " FAILED"); b.log(e) }
+            ok()
+        }.onFailure { fail("setTabs", it) }
 
-        // ---- H3: 包裹原生 g_1 监听器 ----
+        // ---- 3 包裹原生 g_1 监听器 ----
         runCatching {
             val g1 = cl.loadClass("$TAB_VIEW\$g_1")
             val m = tabCls.methods.first { it.name == "setOnTabChangeListener" }
@@ -76,13 +87,15 @@ object GlassBarHooks {
                             (args?.getOrNull(0) as? Int)?.let(BarState::select); null
                         }
                         "onTabTouched" -> null
-                        else -> runCatching { method.invoke(original, *(args ?: emptyArray())) }.getOrNull()
+                        else -> runCatching { method.invoke(original, *(args ?: emptyArray())) }
+                            .getOrNull()
                     }
                 }
             }
-        }.onSuccess { hookIdx++; b.log("hook/" + hookIdx + " ok") }.onFailure { e -> b.log("hook/" + (hookIdx + 1) + " FAILED"); b.log(e) }
+            ok()
+        }.onFailure { fail("g1-proxy", it) }
 
-        // ---- 绘制期压制 + 红点刷新锚点 ----
+        // ---- 4 drawCanvas: 红点刷新 + 绘制期压制 ----
         runCatching {
             val m = tabCls.declaredMethods.first { it.name == "drawCanvas" }
             m.isAccessible = true
@@ -91,46 +104,47 @@ object GlassBarHooks {
                 runCatching {
                     val v = f.thisObject as? View ?: return@hookAfter
                     val p = v.parent as? ViewGroup ?: return@hookAfter
-                    if (p.findViewWithTag<View>(com.pdd.glassbar.ui.GlassOverlay.TAG) != null &&
+                    if (p.findViewWithTag<View>(GlassOverlay.TAG) != null &&
                         (v.visibility != View.GONE || v.alpha != 0f)
-                    ) com.pdd.glassbar.ui.BarState.vanish(v)
+                    ) BarState.vanish(v)
                 }
             }
-        }.onSuccess { hookIdx++; b.log("hook/" + hookIdx + " ok") }.onFailure { e -> b.log("hook/" + (hookIdx + 1) + " FAILED"); b.log(e) }
+            ok()
+        }.onFailure { fail("drawCanvas", it) }
 
-        // ---- 新实例挂载守卫(PddTabView 若未覆写则跳过, protected 不在 getMethods) ----
+        // ---- 5 PddTabView 挂载守卫(未覆写则跳过) ----
         runCatching {
             tabCls.declaredMethods.firstOrNull { it.name == "onAttachedToWindow" }?.let { m ->
-            b.hookAfter(m) { f ->
-                val v = f.thisObject as? View ?: return@hookAfter
-                val p = v.parent as? ViewGroup ?: return@hookAfter
-                if (p.findViewWithTag<View>(com.pdd.glassbar.ui.GlassOverlay.TAG) != null)
-                    com.pdd.glassbar.ui.BarState.vanish(v)
+                m.isAccessible = true
+                b.hookAfter(m) { f ->
+                    val v = f.thisObject as? View ?: return@hookAfter
+                    val p = v.parent as? ViewGroup ?: return@hookAfter
+                    if (p.findViewWithTag<View>(GlassOverlay.TAG) != null) BarState.vanish(v)
                 }
-            }.onSuccess { hookIdx++; b.log("hook/" + hookIdx + " ok") }.onFailure { e -> b.log("hook/" + (hookIdx + 1) + " FAILED"); b.log(e) }
+            }
+            ok()
+        }.onFailure { fail("tab-attach", it) }
 
-        // ---- 骨架屏压制 ----
+        // ---- 6/7 骨架屏压制(drawCanvas + 挂载) ----
         runCatching {
             val phCls = cl.loadClass("$TAB_VIEW_PKG.PddTabPlaceholderLayout")
-            val dc = phCls.declaredMethods.firstOrNull { it.name == "drawCanvas" }
-                ?: phCls.methods.firstOrNull { it.name == "drawCanvas" }
-            dc?.let {
-                it.isAccessible = true
-                b.hookAfter(it) { f ->
+            phCls.declaredMethods.firstOrNull { it.name == "drawCanvas" }?.let { m ->
+                m.isAccessible = true
+                b.hookAfter(m) { f ->
                     val v = f.thisObject as? View ?: return@hookAfter
                     val p = v.parent as? ViewGroup ?: return@hookAfter
-                    if (p.findViewWithTag<View>(com.pdd.glassbar.ui.GlassOverlay.TAG) != null)
-                        com.pdd.glassbar.ui.BarState.vanish(v)
+                    if (p.findViewWithTag<View>(GlassOverlay.TAG) != null) BarState.vanish(v)
                 }
             }
-            phCls.methods.firstOrNull { it.name == "onAttachedToWindow" }?.let {
-                b.hookAfter(it) { f ->
+            phCls.declaredMethods.firstOrNull { it.name == "onAttachedToWindow" }?.let { m ->
+                m.isAccessible = true
+                b.hookAfter(m) { f ->
                     val v = f.thisObject as? View ?: return@hookAfter
                     val p = v.parent as? ViewGroup ?: return@hookAfter
-                    if (p.findViewWithTag<View>(com.pdd.glassbar.ui.GlassOverlay.TAG) != null)
-                        com.pdd.glassbar.ui.BarState.vanish(v)
+                    if (p.findViewWithTag<View>(GlassOverlay.TAG) != null) BarState.vanish(v)
                 }
             }
-        }.onSuccess { hookIdx++; b.log("hook/" + hookIdx + " ok") }.onFailure { e -> b.log("hook/" + (hookIdx + 1) + " FAILED"); b.log(e) }
+            ok()
+        }.onFailure { fail("placeholder", it) }
     }
 }
