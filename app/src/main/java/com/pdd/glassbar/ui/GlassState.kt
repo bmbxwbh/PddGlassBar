@@ -47,6 +47,15 @@ object BarState {
     private var dotMethod: Method? = null
     private var fieldGettersReady = false
 
+    private val nativeByIndex = ConcurrentHashMap<Int, ImageBitmap>()
+
+    fun putNativeIcon(index: Int, bmp: ImageBitmap) {
+        nativeByIndex[index] = bmp
+        iconTick++
+    }
+
+    fun nativeIcon(index: Int): ImageBitmap? = nativeByIndex[index]
+
     fun putIcon(url: String, bmp: ImageBitmap) {
         icons[url] = bmp
         iconsByBase[baseOf(url)] = bmp

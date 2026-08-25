@@ -3,7 +3,9 @@ package com.pdd.glassbar.ui
 import android.view.View
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.material3.Icon
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -74,6 +76,7 @@ fun GlassBarHost(sourceView: View) {
                 liquidGlassBlurRadius = 18.dp,
                 dynamicGravityHighlight = true,
                 iconContent = { item, index ->
+                    @Suppress("UNUSED_EXPRESSION") BarState.iconTick // 订阅收割/捕获更新
                     val isSelected = index == BarState.selected
                     BadgedBox(
                         badge = {
@@ -87,11 +90,21 @@ fun GlassBarHost(sourceView: View) {
                             animationSpec = tween(200),
                             label = "pddTabIcon",
                         ) { sel ->
-                            Icon(
-                                imageVector = PddIcons.icon(item.group, sel),
-                                contentDescription = item.title,
-                                modifier = Modifier.size(26.dp),
-                            )
+                            // 三级阶梯: 原生收割 → 运行时捕获 → 内置向量兜底
+                            val native = BarState.nativeIcon(index)
+                            when {
+                                native != null -> Image(
+                                    bitmap = native,
+                                    contentDescription = item.title,
+                                    modifier = Modifier.size(26.dp),
+                                    contentScale = ContentScale.Fit,
+                                )
+                                else -> Icon(
+                                    imageVector = PddIcons.icon(item.group, sel),
+                                    contentDescription = item.title,
+                                    modifier = Modifier.size(26.dp),
+                                )
+                            }
                         }
                     }
                 },

@@ -108,13 +108,17 @@ object GlassBarHooks {
                 val url = f.args.getOrNull(1) as? String ?: return@hookAfter
                 val src = f.args.getOrNull(2) as? Bitmap ?: return@hookAfter
                 if (src.isRecycled) return@hookAfter
+                runCatching { if (BarState.iconTick < 8) b.log("icon captured: $url") }
                 // 深拷贝: 宿主图片库可能随时回收原位图, 引用原对象会在玻璃栏绘制时崩溃
                 val safe = runCatching {
                     src.copy(android.graphics.Bitmap.Config.ARGB_8888, false)?.asImageBitmap()
                 }.getOrNull() ?: return@hookAfter
                 BarState.putIcon(url, safe)
             }
-        }.onFailure { b.log(it) }
+        }.onFailure {
+            b.log("H4 j-hook NOT FOUND — 原生捕获不可用, 将走向量兜底")
+            b.log(it)
+        }
 
         // ---- 换页/换肤压制点: c2() 是 tab 设置最外层(内部 remove/re-add 视图),
         // 结束后所有视图就位 —— 在此统一执行一次最终隐藏

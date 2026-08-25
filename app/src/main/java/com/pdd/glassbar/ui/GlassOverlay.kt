@@ -106,7 +106,25 @@ object GlassOverlay {
             }
             log("compose-created")
 
-            // ---- 阶段 3: 隐藏原生三件套 + 关裁剪 + 挂载 ----
+            // ---- 阶段 3: 收割原生图标(必须在隐藏前, 此时 Drawable 已就位) ----
+            runCatching {
+                var n = 0
+                originals.forEach { sv ->
+                    collectImageViews(sv).forEach { iv ->
+                        val d = iv.drawable ?: return@forEach
+                        val w = d.intrinsicWidth.takeIf { it > 0 } ?: 64
+                        val h = d.intrinsicHeight.takeIf { it > 0 } ?: 64
+                        val bmp = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+                        val c = android.graphics.Canvas(bmp)
+                        d.setBounds(0, 0, w, h)
+                        c.draw(d)
+                        BarState.putNativeIcon(n++, bmp.asImageBitmap())
+                    }
+                }
+                log("harvested=$n")
+            }.onFailure { log("harvest-failed") }
+
+            // ---- 阶段 4: 隐藏原生三件套 + 关裁剪 + 挂载 ----
             originals.forEach { it.visibility = View.GONE }
             container.clipChildren = false
             container.clipToPadding = false
@@ -132,3 +150,13 @@ object GlassOverlay {
         }
     }
 }
+
+private fun collectImageViews(root: View, out: MutableList<android.widget.ImageView>) {
+    when (root) {
+        is android.widget.ImageView -> out += root
+        is ViewGroup -> for (i in 0 until root.childCount) collectImageViews(root.getChildAt(i), out)
+    }
+}
+
+private fun collectImageViews(root: ViewGroup): List<android.widget.ImageView> =
+    buildList { collectImageViews(root as View, this) }
