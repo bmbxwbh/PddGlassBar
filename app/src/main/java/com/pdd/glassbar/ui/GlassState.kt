@@ -59,7 +59,8 @@ object BarState {
         if (!fieldGettersReady) {
             fieldGettersReady = true
             runCatching {
-                val cls = Class.forName("com.xunmeng.pinduoduo.home.base.entity.HomeBottomTab")
+                val cls = (loader ?: this::class.java.classLoader)
+                    .loadClass("com.xunmeng.pinduoduo.home.base.entity.HomeBottomTab")
                 titleF = cls.getField("title")
                 imageF = cls.getField("image")
                 imageSelF = cls.getField("image_selected")

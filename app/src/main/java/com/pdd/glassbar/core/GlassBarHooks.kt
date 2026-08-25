@@ -43,7 +43,7 @@ object GlassBarHooks {
             val m = tabCls.methods.first { it.name == "setTabs" }
             b.hookBefore(m) { f ->
                 @Suppress("UNCHECKED_CAST")
-                BarState.syncTabs(f.args.getOrNull(0) as? List<Any?>)
+                BarState.syncTabs(f.args.getOrNull(0) as? List<Any?>, f.member?.javaClass?.classLoader ?: b.hostClassLoader)
             }
         }.onFailure { b.log(it) }
 
@@ -78,9 +78,14 @@ object GlassBarHooks {
             }
             m.isAccessible = true
             b.hookAfter(m) { f ->
-                val url = f.args.getOrNull(1) as? String ?: return@hookAfter
-                val bmp = f.args.getOrNull(2) as? Bitmap ?: return@hookAfter
-                BarState.putIcon(url, bmp.asImageBitmap())
+                val url = f.args.getOrNull(1) as? String ?: return
+                val src = f.args.getOrNull(2) as? Bitmap ?: return
+                if (src.isRecycled) return
+                // 深拷贝: 宿主图片库可能随时回收原位图, 引用原对象会在玻璃栏绘制时崩溃
+                val safe = runCatching {
+                    src.copy(android.graphics.Bitmap.Config.ARGB_8888, false)?.asImageBitmap()
+                }.getOrNull() ?: return
+                BarState.putIcon(url, safe)
             }
         }.onFailure { b.log(it) }
 

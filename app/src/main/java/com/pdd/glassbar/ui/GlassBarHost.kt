@@ -51,7 +51,7 @@ fun GlassBarHost(sourceView: View) {
         },
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
-            FloatingBottomBar(
+            if (BarState.tabs.isNotEmpty()) FloatingBottomBar(
                 items = BarState.tabs.toList(),
                 selectedIndex = { BarState.selected },
                 onSelected = { index -> BarState.requestSelect(index) },
