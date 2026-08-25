@@ -64,6 +64,18 @@ object BarState {
 
     private val nativeByIndex = ConcurrentHashMap<Int, ImageBitmap>()
 
+    // 被隐藏的原生视图引用 —— 周期性再压制, 防任意路径翻回 VISIBLE
+    private val hiddenRefs = java.util.concurrent.CopyOnWriteArrayList<java.lang.ref.WeakReference<android.view.View>>()
+
+    fun registerHidden(v: android.view.View) {
+        hiddenRefs += java.lang.ref.WeakReference(v)
+    }
+
+    fun reassertHidden() {
+        hiddenRefs.removeAll { ref -> ref.get() == null }
+        hiddenRefs.forEach { ref -> runCatching { ref.get()?.visibility = android.view.View.GONE } }
+    }
+
     fun putNativeIcon(index: Int, bmp: ImageBitmap) {
         nativeByIndex[index] = bmp
         iconTick++

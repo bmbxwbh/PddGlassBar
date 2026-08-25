@@ -191,7 +191,7 @@ object GlassBarHooks {
             }
         }.onFailure { b.log(it) }
 
-$1: 任何 PddTabView 在已注入容器内挂载时立即隐藏 ----
+        // ---- 新实例守卫: 任何 PddTabView 在已注入容器内挂载时立即隐藏 ----
         runCatching {
             val m = tabCls.methods.first { it.name == "onAttachedToWindow" }
             b.hookAfter(m) { f ->
