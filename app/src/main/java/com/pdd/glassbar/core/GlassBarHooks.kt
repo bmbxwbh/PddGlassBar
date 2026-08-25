@@ -125,6 +125,7 @@ object GlassBarHooks {
                     b.log("zfilter " + list.size + "/" + kept.size + " -> applied")
                 }
                 BarState.filterAndSync(kept, b.hostClassLoader)
+                BarState.resetControllerPages()
             }
             ok()
         }.onFailure { fail("zfilter", it) }

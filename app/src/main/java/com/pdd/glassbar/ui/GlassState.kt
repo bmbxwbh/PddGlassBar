@@ -125,14 +125,32 @@ object BarState {
         }
     }
 
+    private var controllerRef: Any? = null
+
     fun attachListener(original: Any, g1Class: Class<*>) {
         hostListener = original
+        controllerRef = original // g_1 实现者就是 dl1.p 控制器本身
         selectMethod = runCatching { g1Class.getMethod("onTabSelected", Int::class.javaPrimitiveType) }.getOrNull()
         touchMethod = runCatching { g1Class.getMethod("onTabTouched", Int::class.javaPrimitiveType) }.getOrNull()
         doubleTapMethod = runCatching { g1Class.getMethod("onTabDoubleTap", Int::class.javaPrimitiveType) }.getOrNull()
     }
 
+    /** 清空控制器按原始列表建的页缓存, 强制按过滤后的4项重建。 */
+    fun resetControllerPages() {
+        val c = controllerRef ?: return
+        runCatching {
+            val cls = c.javaClass
+            listOf("i", "j").forEach { n ->
+                runCatching { cls.getField(n).setInt(c, -1) }
+            }
+            listOf("a", "b").forEach { n ->
+                runCatching { (cls.getField(n).get(c) as? android.util.SparseArray<*>)?.clear() }
+            }
+        }
+    }
+
     fun requestSelect(index: Int) {
+        resetControllerPages()
         val l = hostListener ?: return
         runCatching { selectMethod?.invoke(l, index) }
             .onFailure { runCatching { touchMethod?.invoke(l, index) } }
