@@ -1,7 +1,15 @@
 package com.pdd.glassbar.ui
 
 import androidx.compose.ui.graphics.vector.ImageVector
-import com.composables.icons.materialsymbols.outlined.MaterialSymbols.Outlined
+import com.composables.icons.materialsymbols.MaterialSymbols
+import com.composables.icons.materialsymbols.Assignment
+import com.composables.icons.materialsymbols.Chat
+import com.composables.icons.materialsymbols.Explore
+import com.composables.icons.materialsymbols.Favorite
+import com.composables.icons.materialsymbols.Home
+import com.composables.icons.materialsymbols.Person
+import com.composables.icons.materialsymbols.Star
+import com.composables.icons.materialsymbols.Videocam
 import com.composables.icons.materialsymbols.outlinedfilled.Assignment as FAssignment
 import com.composables.icons.materialsymbols.outlinedfilled.Chat as FChat
 import com.composables.icons.materialsymbols.outlinedfilled.Explore as FExplore
@@ -28,18 +36,18 @@ object PddIcons {
     private fun p(o: ImageVector, f: ImageVector) = Pair_(o, f)
 
     private val MAP = mapOf(
-        0 to p(Outlined.Home, FHome),
-        1 to p(Outlined.Star, FStar),
-        3 to p(Outlined.Chat, FChat),
-        4 to p(Outlined.Person, FPerson),
-        5 to p(Outlined.Explore, FExplore),
-        7 to p(Outlined.Favorite, FFavorite),
-        9 to p(Outlined.Videocam, FVideocam),
-        10 to p(Outlined.Assignment, FAssignment),
-        14 to p(Outlined.Videocam, FVideocam),
+        0 to p(MaterialSymbols.Outlined.Home, FHome),
+        1 to p(MaterialSymbols.Outlined.Star, FStar),
+        3 to p(MaterialSymbols.Outlined.Chat, FChat),
+        4 to p(MaterialSymbols.Outlined.Person, FPerson),
+        5 to p(MaterialSymbols.Outlined.Explore, FExplore),
+        7 to p(MaterialSymbols.Outlined.Favorite, FFavorite),
+        9 to p(MaterialSymbols.Outlined.Videocam, FVideocam),
+        10 to p(MaterialSymbols.Outlined.Assignment, FAssignment),
+        14 to p(MaterialSymbols.Outlined.Videocam, FVideocam),
     )
 
-    private val DEFAULT = p(Outlined.Home, FHome)
+    private val DEFAULT = p(MaterialSymbols.Outlined.Home, FHome)
 
     fun icon(group: Int, selected: Boolean): ImageVector =
         (MAP[group] ?: DEFAULT).let { if (selected) it.f else it.o }

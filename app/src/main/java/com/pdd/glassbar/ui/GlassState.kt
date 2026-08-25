@@ -97,7 +97,8 @@ object BarState {
         if (mapped != tabs.toList()) {
             tabs.clear(); tabs.addAll(mapped)
             runCatching { com.pdd.glassbar.loader.PddLoader.bridge.log(
-                "synced ${mapped.size} tabs: " + mapped.joinToString("|") { "${it.group}:${it.title}" }) }            if (selected >= mapped.size) selected = 0
+                "synced ${mapped.size} tabs: " + mapped.joinToString("|") { "${it.group}:${it.title}" }) }
+            if (selected >= mapped.size) selected = 0
             refreshDots()
         }
     }
