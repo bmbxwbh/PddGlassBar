@@ -113,8 +113,8 @@ object GlassBarHooks {
             ).getField("group")
             val order = com.pdd.glassbar.ui.BarState.GROUP_ORDER
             b.hookBefore(zM) { f ->
-                val hl = f.args.getOrNull(1) ?: return@hookAfter
-                val list = hlField.get(hl) as? MutableList<Any> ?: return@hookAfter
+                val hl = f.args.getOrNull(1) ?: return@hookBefore
+                val list = hlField.get(hl) as? MutableList<Any> ?: return@hookBefore
                 val kept = list.mapNotNull { t ->
                     val g = runCatching { entG.get(t) as? Int }.getOrNull()
                     if (g != null && g in order) g to t else null
