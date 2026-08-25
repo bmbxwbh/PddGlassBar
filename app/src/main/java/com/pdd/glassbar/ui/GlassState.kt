@@ -1,34 +1,24 @@
 package com.pdd.glassbar.ui
 
+import android.view.MotionEvent
 import android.view.View
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
 import com.pdd.glassbar.loader.PddLoader
+import java.lang.ref.WeakReference
 import java.lang.reflect.Field
-import java.lang.reflect.Method
 
 /**
- * 固定四页模式(带三级降级):
- *  ① 按实体 group 字段精确过滤 [首页0,视频14,聊天3,个人4]
- *  ② 反射不可用   → 原样放行全部 tab(玻璃栏镜像, 索引对齐, 标题占位)
- *  ③ 空列表       → 原样返回
+ * 纯镜像架构: 不修改 PDD 任何行为, 只观察 + 透明化 + 合成触摸。
  */
 object BarState {
 
-    data class TabUi(val title: String, val group: Int)
+    data class TabUi(val title: String, val group: Int, val nativeIndex: Int)
 
     val GROUP_ORDER = listOf(0, 14, 3, 4)
     val FIXED_TITLES = mapOf(0 to "首页", 14 to "视频", 3 to "聊天", 4 to "个人")
-
-    private val rawTabs = ArrayList<Any>()
-    private var dotMethod: Method? = null
-    private var groupField: Field? = null
-    private var probedClass: Class<*>? = null
-
-    private val hiddenRefs = java.util.concurrent.CopyOnWriteArrayList<
-        java.lang.ref.WeakReference<View>>()
 
     val tabs = mutableStateListOf<TabUi>()
     val dots = mutableStateListOf<Boolean>()
@@ -38,126 +28,137 @@ object BarState {
     var dotTick by mutableIntStateOf(0)
         private set
 
-    fun select(index: Int) {
-        selected = index.coerceIn(0, (tabs.size - 1).coerceAtLeast(0))
-    }
+    // ---- 原生视图引用 ----
+    private val hiddenRefs = WeakReferenceHashSet()
+    private var tabViewRef: WeakReference<View>? = null
+    private var controllerRef: Any? = null
+    private var controllerIField: Field? = null
 
-    /** 彻底隐身: GONE 不占位 + alpha0 防 VISIBLE 翻回瞬帧。 */
-    fun vanish(v: View) {
-        v.visibility = View.GONE
-        v.alpha = 0f
+    // ---- 探测缓存 ----
+    private var probedClass: Class<*>? = null
+    private var groupField: Field? = null
+    private var titleField: Field? = null
+    private var dotMethod: Method? = null
+
+    fun bindTabView(v: View) {
+        tabViewRef = WeakReference(v)
     }
 
     fun registerHidden(v: View) {
-        vanish(v)
-        hiddenRefs += java.lang.ref.WeakReference(v)
+        v.alpha = 0f                      // 核心隐藏手段: 可见性翻转碰不到 alpha
+        hiddenRefs.add(v)
     }
 
-    // 周期性再压制(同时恢复 alpha, 防第三方改透明度)。
+    /** 周期性再透明化。 */
     fun reassertHidden() {
-        hiddenRefs.removeAll { it.get() == null }
-        hiddenRefs.forEach { runCatching { it.get()?.let(::vanish) } }
+        hiddenRefs.forEach { runCatching { it.viewRef()?.alpha = 0f } }
     }
 
+    private fun View.viewRef(): View = this
+
+    private class WeakReferenceHashSet {
+        private val set = LinkedHashSet<WeakEntry>()
+        fun add(v: View) { set += WeakEntry(v) }
+        fun forEach(action: (View) -> Unit) {
+            synchronized(set) {
+                set.removeAll { it.get() == null }
+                set.mapNotNull { it.get() }.forEach(action)
+            }
+        }
+        private class WeakEntry(val v: View) : java.lang.ref.WeakReference<View>(v) {
+            override fun equals(other: Any?) = other is WeakEntry && get() === other.get()
+            override fun hashCode() = System.identityHashCode(get())
+        }
+    }
+
+    private fun WeakEntry.viewRef(): View? = get()
+
+    // ---- 只读镜像 ----
+    fun mirrorFrom(rawList: List<Any?>?) {
+        if (rawList.isNullOrEmpty()) return
+        ensureProbe(rawList.filterNotNull().first())
+        val out = mutableListOf<TabUi>()
+        val dts = mutableListOf<Boolean>()
+        rawList.forEachIndexed { idx, t ->
+            t ?: return@forEachIndexed
+            val g = readGroup(t)
+            val known = FIXED_TITLES[g]
+            val title = when {
+                known != null -> known
+                else -> runCatching { (titleField?.get(t) as? String)?.takeIf { it.isNotBlank() } }
+                    .getOrNull() ?: "页面${idx + 1}"
+            }
+            out += TabUi(title, g, idx)
+            dts += runCatching { dotMethod?.invoke(t) as? Boolean == true }.getOrDefault(false)
+        }
+        // 显示层过滤: 若能识别出固定页则仅展示它们(顺序固定), 原生索引保留用于触摸映射
+        val fixedOnly = out.filter { it.group in GROUP_ORDER }.sortedBy { GROUP_ORDER.indexOf(it.group) }
+        val display = if (fixedOnly.isNotEmpty()) fixedOnly else out
+        if (display != tabs.toList()) {
+            tabs.clear(); tabs.addAll(display)
+        }
+        if (dts != dots.toList()) {
+            dots.clear(); dots.addAll(dts); dotTick++
+        }
+        // 同步选中态: 从控制器 i 字段读取原生当前索引 → 映射到展示索引
+        syncSelected()
+    }
+
+    private fun syncSelected() {
+        val f = controllerIField ?: return
+        val c = controllerRef ?: return
+        runCatching {
+            val nativeIdx = (f.get(c) as? Number)?.toInt() ?: return
+            val disp = tabs.indexOfFirst { it.nativeIndex == nativeIdx }
+            if (disp >= 0 && selected != disp) selected = disp
+        }
+    }
+
+    fun markSelected(displayIdx: Int) {
+        if (displayIdx in tabs.indices) selected = displayIdx
+    }
+
+    // ---- 点击路由: 合成真实触摸事件 ----
+    fun requestSelect(displayIdx: Int) {
+        markSelected(displayIdx)
+        val tv = tabViewRef?.get() ?: return
+        val nativeIdx = tabs.getOrNull(displayIdx)?.nativeIndex ?: return
+        if (nativeIdx < 0 || nativeIdx >= tv.childCount) return
+        val child = tv.getChildAt(nativeIdx)
+        val cLoc = IntArray(2); child.getLocationOnScreen(cLoc)
+        val tLoc = IntArray(2); tv.getLocationOnScreen(tLoc)
+        val x = (cLoc[0] + child.width / 2f) - tLoc[0]
+        val y = (cLoc[1] + child.height / 2f) - tLoc[1]
+        val now = android.os.SystemClock.uptimeMillis()
+        runCatching {
+            tv.dispatchTouchEvent(MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0))
+            val upAt = now + 60
+            tv.dispatchTouchEvent(MotionEvent.obtain(upAt, upAt, MotionEvent.ACTION_UP, x, y, 0))
+        }
+        PddLoader.bridge.log("tap->native idx=$nativeIdx")
+    }
+
+    // ---- 控制器绑定(仅读 i 同步选中态) ----
+    fun bindController(controller: Any) {
+        controllerRef = controller
+        controllerIField = runCatching { controller.javaClass.getField("i") }.getOrNull()
+    }
+
+    // ---- 探测 ----
     private fun ensureProbe(item: Any) {
         if (probedClass != null) return
-        val cls = item.javaClass
-        probedClass = cls
-        runCatching { groupField = cls.getField("group") }
-        dotMethod = runCatching { cls.getMethod("showRedDot") }.getOrNull()
+        probedClass = item.javaClass
+        runCatching { groupField = item.javaClass.getField("group") }
+        runCatching { titleField = item.javaClass.getField("title") }
+        dotMethod = runCatching { item.javaClass.getMethod("showRedDot") }.getOrNull()
         PddLoader.bridge.log(
-            "probe cls=" + cls.name +
-                " groupField=" + (groupField != null) +
+            "probe cls=" + item.javaClass.name +
+                " group=" + (groupField != null) +
+                " title=" + (titleField != null) +
                 " dot=" + (dotMethod != null)
         )
     }
 
     private fun readGroup(item: Any): Int =
         runCatching { (groupField?.get(item) as? Number)?.toInt() }.getOrNull() ?: -1
-
-    /** 返回实际传回宿主的列表; 玻璃栏状态与其严格同步。 */
-    fun filterAndSync(rawList: List<Any?>?, loader: ClassLoader?): List<Any?> {
-        if (rawList.isNullOrEmpty()) return rawList ?: emptyList()
-        val nonNull = rawList.filterNotNull()
-        synchronized(rawTabs) {
-            rawTabs.clear()
-            rawTabs.addAll(nonNull)
-        }
-        ensureProbe(nonNull.first())
-        PddLoader.bridge.log("filter in=" + rawList.size)
-
-        // ① 精确 group 过滤
-        val tagged = nonNull.mapNotNull { t ->
-            val g = readGroup(t)
-            if (g in GROUP_ORDER) Triple(t, g, FIXED_TITLES[g] ?: "Tab") else null
-        }
-
-        return if (tagged.isNotEmpty()) {
-            val ordered = GROUP_ORDER.mapNotNull { g -> tagged.firstOrNull { it.second == g } }
-            rebuildTabs(ordered.map { TabUi(it.third, it.second) })
-            PddLoader.bridge.log(
-                "synced " + tabs.size + " tabs: " +
-                    tabs.joinToString("|") { it.group.toString() + ":" + it.title }
-            )
-            ordered.map { it.first }
-        } else {
-            // ② 降级直通: 镜像全部 tab
-            rebuildTabs(nonNull.mapIndexed { i, t -> TabUi("页面" + (i + 1), -1) })
-            PddLoader.bridge.log("passthrough " + nonNull.size + " tabs")
-            rawList
-        }
-    }
-
-    private fun rebuildTabs(list: List<TabUi>) {
-        tabs.clear()
-        tabs.addAll(list)
-        if (selected >= tabs.size) selected = 0
-        refreshDots()
-    }
-
-    fun refreshDots() {
-        val dm = dotMethod ?: return
-        val fresh = synchronized(rawTabs) {
-            rawTabs.map { runCatching { dm.invoke(it) as? Boolean == true }.getOrDefault(false) }
-        }
-        if (fresh != dots.toList()) {
-            dots.clear(); dots.addAll(fresh); dotTick++
-        }
-    }
-
-    private var controllerRef: Any? = null
-
-    fun attachListener(original: Any, g1Class: Class<*>) {
-        hostListener = original
-        controllerRef = original // g_1 实现者就是 dl1.p 控制器本身
-        selectMethod = runCatching { g1Class.getMethod("onTabSelected", Int::class.javaPrimitiveType) }.getOrNull()
-        touchMethod = runCatching { g1Class.getMethod("onTabTouched", Int::class.javaPrimitiveType) }.getOrNull()
-        doubleTapMethod = runCatching { g1Class.getMethod("onTabDoubleTap", Int::class.javaPrimitiveType) }.getOrNull()
-    }
-
-    /** 清空控制器按原始列表建的页缓存, 强制按过滤后的4项重建。 */
-    fun resetControllerPages() {
-        val c = controllerRef ?: return
-        runCatching {
-            val cls = c.javaClass
-            listOf("i", "j").forEach { n ->
-                runCatching { cls.getField(n).setInt(c, -1) }
-            }
-            listOf("a", "b").forEach { n ->
-                runCatching { (cls.getField(n).get(c) as? android.util.SparseArray<*>)?.clear() }
-            }
-        }
-    }
-
-    fun requestSelect(index: Int) {
-        resetControllerPages()
-        val l = hostListener ?: return
-        runCatching { selectMethod?.invoke(l, index) }
-            .onFailure { runCatching { touchMethod?.invoke(l, index) } }
-    }
-
-    private var hostListener: Any? = null
-    private var selectMethod: Method? = null
-    private var touchMethod: Method? = null
-    private var doubleTapMethod: Method? = null
 }

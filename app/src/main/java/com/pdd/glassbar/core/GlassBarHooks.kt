@@ -1,18 +1,17 @@
 package com.pdd.glassbar.core
 
-import android.view.View
 import android.view.ViewGroup
 import com.pdd.glassbar.loader.HookBridge
 import com.pdd.glassbar.ui.BarState
 import com.pdd.glassbar.ui.GlassOverlay
 import com.pdd.glassbar.ui.utils.findActivity
-import java.lang.reflect.Proxy
 
 /**
- * 固定四页模式 Hook 安装器。
- * 钩子清单:
- *  1 initView 注入      2 setTabs 过滤回传     3 g_1 监听器代理
- *  4 drawCanvas 压制+红点    5 tab 挂载守卫        6/7 骨架屏压制
+ * 纯镜像架构 Hook 安装器(只读, 不改 PDD 任何行为):
+ *  1 initView 注入 overlay
+ *  2 setTabs 只读镜像(不再修改参数!)
+ *  3 g_1 监听器绑定控制器(仅读取 i 同步选中态)
+ *  4 骨架屏挂载透明守卫
  */
 object GlassBarHooks {
 
@@ -28,12 +27,8 @@ object GlassBarHooks {
         val containerCls = cl.loadClass(CONTAINER)
         var hookIdx = 0
 
-        fun ok() {
-            hookIdx++; b.log("hook/$hookIdx ok")
-        }
-        fun fail(name: String, t: Throwable) {
-            b.log("hook/$name FAILED"); b.log(t)
-        }
+        fun ok() { hookIdx++; b.log("hook/$hookIdx ok") }
+        fun fail(name: String, t: Throwable) { b.log("hook/$name FAILED"); b.log(t) }
 
         // ---- 1 initView 注入(延迟到本轮消息循环之后) ----
         runCatching {
@@ -50,133 +45,35 @@ object GlassBarHooks {
             ok()
         }.onFailure { fail("initView", it) }
 
-        // ---- 2 setTabs 过滤回传 ----
+        // ---- 2 setTabs 只读镜像 ----
         runCatching {
-            val m = tabCls.methods.filter { it.name == "setTabs" }.firstOrNull { mi ->
-                runCatching { mi.genericParameterTypes.joinToString().contains("HomeBottomTab") }
-                    .getOrDefault(false)
-            } ?: tabCls.methods.first { it.name == "setTabs" }
-            b.hookBefore(m) { f ->
+            val m = tabCls.methods.first { it.name == "setTabs" }
+            b.hookAfter(m) { f ->
                 @Suppress("UNCHECKED_CAST")
-                val filtered = BarState.filterAndSync(
-                    f.args.getOrNull(0) as? List<Any?>,
-                    f.member?.javaClass?.classLoader ?: b.hostClassLoader,
-                )
-                f.args[0] = filtered
-                runCatching {
-                    val tv = f.thisObject as? View
-                    val p = tv?.parent as? ViewGroup
-                    if (p != null && p.findViewWithTag<View>(GlassOverlay.TAG) != null)
-                        com.pdd.glassbar.ui.BarState.vanish(tv)
-                }
+                BarState.mirrorFrom(f.args.getOrNull(0) as? List<Any?>)
             }
             ok()
-        }.onFailure { fail("setTabs", it) }
+        }.onFailure { fail("setTabs-mirror", it) }
 
-        // ---- 3 包裹原生 g_1 监听器 ----
+        // ---- 3 绑定控制器(原生监听器即 dl1.p 控制器本身) ----
         runCatching {
             val g1 = cl.loadClass("$TAB_VIEW\$g_1")
             val m = tabCls.methods.first { it.name == "setOnTabChangeListener" }
             b.hookAfter(m) { f ->
                 val original = f.args.getOrNull(0) ?: return@hookAfter
-                if (Proxy.isProxyClass(original.javaClass)) return@hookAfter
-                BarState.attachListener(original, g1)
-                f.args[0] = Proxy.newProxyInstance(g1.classLoader, arrayOf(g1)) { _, method, args ->
-                    when (method.name) {
-                        "onTabSelected", "onTabDoubleTap" -> {
-                            (args?.getOrNull(0) as? Int)?.let(BarState::select); null
-                        }
-                        "onTabTouched" -> null
-                        else -> runCatching { method.invoke(original, *(args ?: emptyArray())) }
-                            .getOrNull()
-                    }
-                }
+                if (java.lang.reflect.Proxy.isProxyClass(original.javaClass)) return@hookAfter
+                BarState.bindController(original)
             }
             ok()
-        }.onFailure { fail("g1-proxy", it) }
+        }.onFailure { fail("controller-bind", it) }
 
-        // ---- 3b: dl1.p.Z 入口 —— 对 HomeTabList.bottom_tabs 原地过滤 ----
-        // Fragment 层与子视图层都从该列表构建; 仅过滤 setTabs 副本会导致
-        // 视图层4项 / 页面层5项错位(切"聊天"打开活动页)。原地过滤三层同源。
-        runCatching {
-            val pCls = cl.loadClass("dl1.p")
-            val zM = pCls.declaredMethods.firstOrNull { mi ->
-                mi.name == "Z" && mi.parameterTypes.size == 3 &&
-                    mi.parameterTypes[1].name.endsWith(".HomeTabList")
-            } ?: throw NoSuchMethodException("dl1.p.Z(HomeTabList)")
-            zM.isAccessible = true
-            val hlField = cl.loadClass(
-                "com.xunmeng.pinduoduo.home.base.entity.HomeTabList"
-            ).getField("bottom_tabs")
-            val entG = cl.loadClass(
-                "com.xunmeng.pinduoduo.home.base.entity.HomeBottomTab"
-            ).getField("group")
-            val order = com.pdd.glassbar.ui.BarState.GROUP_ORDER
-            b.hookBefore(zM) { f ->
-                val hl = f.args.getOrNull(1) ?: return@hookBefore
-                val list = hlField.get(hl) as? MutableList<Any> ?: return@hookBefore
-                val kept = list.mapNotNull { t ->
-                    val g = runCatching { entG.get(t) as? Int }.getOrNull()
-                    if (g != null && g in order) g to t else null
-                }.sortedBy { order.indexOf(it.first) }.map { it.second }
-                if (kept.size != list.size) {
-                    list.clear()
-                    list.addAll(kept)
-                    b.log("zfilter " + list.size + "/" + kept.size + " -> applied")
-                }
-                BarState.filterAndSync(kept, b.hostClassLoader)
-                BarState.resetControllerPages()
-            }
-            ok()
-        }.onFailure { fail("zfilter", it) }
-
-        // ---- 4 drawCanvas: 红点刷新 + 绘制期压制 ----
-        runCatching {
-            val m = tabCls.declaredMethods.first { it.name == "drawCanvas" }
-            m.isAccessible = true
-            b.hookAfter(m) { f ->
-                BarState.refreshDots()
-                runCatching {
-                    val v = f.thisObject as? View ?: return@hookAfter
-                    val p = v.parent as? ViewGroup ?: return@hookAfter
-                    if (p.findViewWithTag<View>(GlassOverlay.TAG) != null &&
-                        (v.visibility != View.GONE || v.alpha != 0f)
-                    ) com.pdd.glassbar.ui.BarState.vanish(v)
-                }
-            }
-            ok()
-        }.onFailure { fail("drawCanvas", it) }
-
-        // ---- 5 PddTabView 挂载守卫(未覆写则跳过) ----
-        runCatching {
-            tabCls.declaredMethods.firstOrNull { it.name == "onAttachedToWindow" }?.let { m ->
-                m.isAccessible = true
-                b.hookAfter(m) { f ->
-                    val v = f.thisObject as? View ?: return@hookAfter
-                    val p = v.parent as? ViewGroup ?: return@hookAfter
-                    if (p.findViewWithTag<View>(GlassOverlay.TAG) != null) com.pdd.glassbar.ui.BarState.vanish(v)
-                }
-            }
-            ok()
-        }.onFailure { fail("tab-attach", it) }
-
-        // ---- 6/7 骨架屏压制(drawCanvas + 挂载) ----
+        // ---- 4 骨架屏挂载透明守卫 ----
         runCatching {
             val phCls = cl.loadClass("$TAB_VIEW_PKG.PddTabPlaceholderLayout")
-            phCls.declaredMethods.firstOrNull { it.name == "drawCanvas" }?.let { m ->
-                m.isAccessible = true
-                b.hookAfter(m) { f ->
-                    val v = f.thisObject as? View ?: return@hookAfter
-                    val p = v.parent as? ViewGroup ?: return@hookAfter
-                    if (p.findViewWithTag<View>(GlassOverlay.TAG) != null) com.pdd.glassbar.ui.BarState.vanish(v)
-                }
-            }
             phCls.declaredMethods.firstOrNull { it.name == "onAttachedToWindow" }?.let { m ->
                 m.isAccessible = true
                 b.hookAfter(m) { f ->
-                    val v = f.thisObject as? View ?: return@hookAfter
-                    val p = v.parent as? ViewGroup ?: return@hookAfter
-                    if (p.findViewWithTag<View>(GlassOverlay.TAG) != null) com.pdd.glassbar.ui.BarState.vanish(v)
+                    (f.thisObject as? android.view.View)?.let { BarState.registerHidden(it) }
                 }
             }
             ok()
