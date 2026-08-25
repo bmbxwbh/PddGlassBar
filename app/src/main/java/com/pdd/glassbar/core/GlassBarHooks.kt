@@ -95,6 +95,40 @@ object GlassBarHooks {
             ok()
         }.onFailure { fail("g1-proxy", it) }
 
+        // ---- 3b: dl1.p.Z 入口 —— 对 HomeTabList.bottom_tabs 原地过滤 ----
+        // Fragment 层与子视图层都从该列表构建; 仅过滤 setTabs 副本会导致
+        // 视图层4项 / 页面层5项错位(切"聊天"打开活动页)。原地过滤三层同源。
+        runCatching {
+            val pCls = cl.loadClass("dl1.p")
+            val zM = pCls.declaredMethods.firstOrNull { mi ->
+                mi.name == "Z" && mi.parameterTypes.size == 3 &&
+                    mi.parameterTypes[1].name.endsWith(".HomeTabList")
+            } ?: throw NoSuchMethodException("dl1.p.Z(HomeTabList)")
+            zM.isAccessible = true
+            val hlField = cl.loadClass(
+                "com.xunmeng.pinduoduo.home.base.entity.HomeTabList"
+            ).getField("bottom_tabs")
+            val entG = cl.loadClass(
+                "com.xunmeng.pinduoduo.home.base.entity.HomeBottomTab"
+            ).getField("group")
+            val order = com.pdd.glassbar.ui.BarState.GROUP_ORDER
+            b.hookBefore(zM) { f ->
+                val hl = f.args.getOrNull(1) ?: return@hookAfter
+                val list = hlField.get(hl) as? MutableList<Any> ?: return@hookAfter
+                val kept = list.mapNotNull { t ->
+                    val g = runCatching { entG.get(t) as? Int }.getOrNull()
+                    if (g != null && g in order) g to t else null
+                }.sortedBy { order.indexOf(it.first) }.map { it.second }
+                if (kept.size != list.size) {
+                    list.clear()
+                    list.addAll(kept)
+                    b.log("zfilter " + list.size + "/" + kept.size + " -> applied")
+                }
+                BarState.filterAndSync(kept, b.hostClassLoader)
+            }
+            ok()
+        }.onFailure { fail("zfilter", it) }
+
         // ---- 4 drawCanvas: 红点刷新 + 绘制期压制 ----
         runCatching {
             val m = tabCls.declaredMethods.first { it.name == "drawCanvas" }
