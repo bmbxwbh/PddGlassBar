@@ -49,6 +49,13 @@ android {
         compose = true
         buildConfig = true
     }
+
+    buildTypes {
+        getByName("release") {
+            // CI 产物开箱即装(调试签名); 正式分发时替换为自有签名
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
 }
 
 tasks.withType<KotlinCompile> {
