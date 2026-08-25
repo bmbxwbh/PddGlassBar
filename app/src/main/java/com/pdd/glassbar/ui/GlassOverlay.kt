@@ -126,7 +126,7 @@ object GlassOverlay {
             log("attached")
         } catch (t: Throwable) {
             runCatching {
-                originals.forEach { it.visibility = View.VISIBLE; it.alpha = 1f }
+                originals.forEach { it.visibility = View.VISIBLE }
                 composeView?.let { container.removeView(it) }
                 container.clipChildren = true
                 container.clipToPadding = true

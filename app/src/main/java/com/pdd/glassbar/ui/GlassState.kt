@@ -1,50 +1,34 @@
 package com.pdd.glassbar.ui
 
+import android.view.View
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
+import com.pdd.glassbar.loader.PddLoader
+import java.lang.reflect.Field
 import java.lang.reflect.Method
 
 /**
- * 固定四页模式: 只保留 首页/多多视频/聊天/个人中心。
- * setTabs 时过滤服务端列表并【回传给 PDD】, 原生侧与玻璃栏索引天然一致。
+ * 固定四页模式(带三级降级):
+ *  ① 按实体 group 字段精确过滤 [首页0,视频14,聊天3,个人4]
+ *  ② 反射不可用   → 原样放行全部 tab(玻璃栏镜像, 索引对齐, 标题占位)
+ *  ③ 空列表       → 原样返回
  */
 object BarState {
 
     data class TabUi(val title: String, val group: Int)
 
-    /** 固定页面与其顺序 */
     val GROUP_ORDER = listOf(0, 14, 3, 4)
     val FIXED_TITLES = mapOf(0 to "首页", 14 to "视频", 3 to "聊天", 4 to "个人")
 
-    private val hiddenRefs = java.util.concurrent.CopyOnWriteArrayList<java.lang.ref.WeakReference<android.view.View>>()
-
-    /** 彻底隐身: GONE(不占位) + alpha0(可见性翻回也不可见, 消除瞬帧)。 */
-    fun vanish(v: android.view.View) {
-        v.visibility = android.view.View.GONE
-        v.alpha = 0f
-    }
-
-    fun registerHidden(v: android.view.View) {
-        vanish(v)
-        hiddenRefs += java.lang.ref.WeakReference(v)
-    }
-
-    fun reassertHidden() {
-        hiddenRefs.removeAll { ref -> ref.get() == null }
-        hiddenRefs.forEach { ref -> runCatching { ref.get()?.let(::vanish) } }
-    }
-
     private val rawTabs = ArrayList<Any>()
     private var dotMethod: Method? = null
-    private var groupField: java.lang.reflect.Field? = null
-    private var fieldsReady = false
+    private var groupField: Field? = null
+    private var probedClass: Class<*>? = null
 
-    private var hostListener: Any? = null
-    private var selectMethod: Method? = null
-    private var touchMethod: Method? = null
-    private var doubleTapMethod: Method? = null
+    private val hiddenRefs = java.util.concurrent.CopyOnWriteArrayList<
+        java.lang.ref.WeakReference<View>>()
 
     val tabs = mutableStateListOf<TabUi>()
     val dots = mutableStateListOf<Boolean>()
@@ -58,34 +42,71 @@ object BarState {
         selected = index.coerceIn(0, (tabs.size - 1).coerceAtLeast(0))
     }
 
-    /** H2: 过滤服务端列表 → 仅保留固定四页, 按固定顺序排序。返回值回传给宿主。 */
+    fun registerHidden(v: View) {
+        v.visibility = View.GONE
+        hiddenRefs += java.lang.ref.WeakReference(v)
+    }
+
+    /** 周期性再压制。 */
+    fun reassertHidden() {
+        hiddenRefs.removeAll { it.get() == null }
+        hiddenRefs.forEach { runCatching { it.get()?.visibility = View.GONE } }
+    }
+
+    private fun ensureProbe(item: Any) {
+        if (probedClass != null) return
+        val cls = item.javaClass
+        probedClass = cls
+        runCatching { groupField = cls.getField("group") }
+        dotMethod = runCatching { cls.getMethod("showRedDot") }.getOrNull()
+        PddLoader.bridge.log(
+            "probe cls=" + cls.name +
+                " groupField=" + (groupField != null) +
+                " dot=" + (dotMethod != null)
+        )
+    }
+
+    private fun readGroup(item: Any): Int =
+        runCatching { (groupField?.get(item) as? Number)?.toInt() }.getOrNull() ?: -1
+
+    /** 返回实际传回宿主的列表; 玻璃栏状态与其严格同步。 */
     fun filterAndSync(rawList: List<Any?>?, loader: ClassLoader?): List<Any?> {
         if (rawList.isNullOrEmpty()) return rawList ?: emptyList()
+        val nonNull = rawList.filterNotNull()
         synchronized(rawTabs) {
             rawTabs.clear()
-            rawTabs.addAll(rawList.filterNotNull())
+            rawTabs.addAll(nonNull)
         }
-        ensureFields(loader)
-        val gf = groupField
+        ensureProbe(nonNull.first())
+        PddLoader.bridge.log("filter in=" + rawList.size)
 
-        data class Item(val entity: Any, val group: Int)
-
-        val items = rawList.mapNotNull { t ->
-            t ?: return@mapNotNull null
-            val g = runCatching { (gf?.get(t) as? Number)?.toInt() }.getOrNull() ?: return@mapNotNull null
-            if (g in GROUP_ORDER) Item(t, g) else null
+        // ① 精确 group 过滤
+        val tagged = nonNull.mapNotNull { t ->
+            val g = readGroup(t)
+            if (g in GROUP_ORDER) Triple(t, g, FIXED_TITLES[g] ?: "Tab") else null
         }
-        val ordered = GROUP_ORDER.mapNotNull { g -> items.firstOrNull { it.group == g } }
-        runCatching { com.pdd.glassbar.loader.PddLoader.bridge.log(
-            "filter in=" + rawList.size + " out=" + ordered.size +
-            " groups=" + ordered.joinToString(",") { it.group.toString() }) }
-        // 同步 UI 状态
+
+        return if (tagged.isNotEmpty()) {
+            val ordered = GROUP_ORDER.mapNotNull { g -> tagged.firstOrNull { it.second == g } }
+            rebuildTabs(ordered.map { TabUi(it.third, it.second) })
+            PddLoader.bridge.log(
+                "synced " + tabs.size + " tabs: " +
+                    tabs.joinToString("|") { it.group.toString() + ":" + it.title }
+            )
+            ordered.map { it.first }
+        } else {
+            // ② 降级直通: 镜像全部 tab
+            rebuildTabs(nonNull.mapIndexed { i, t -> TabUi("页面" + (i + 1), -1) })
+            PddLoader.bridge.log("passthrough " + nonNull.size + " tabs")
+            rawList
+        }
+    }
+
+    private fun rebuildTabs(list: List<TabUi>) {
         tabs.clear()
-        ordered.forEach { tabs.add(TabUi(FIXED_TITLES[it.group] ?: "Tab", it.group)) }
+        tabs.addAll(list)
         if (selected >= tabs.size) selected = 0
         refreshDots()
-
-        return ordered.map { it.entity }
     }
 
     fun refreshDots() {
@@ -98,7 +119,6 @@ object BarState {
         }
     }
 
-    /** H3: 绑定原生监听器(玻璃栏点击路由回去)。 */
     fun attachListener(original: Any, g1Class: Class<*>) {
         hostListener = original
         selectMethod = runCatching { g1Class.getMethod("onTabSelected", Int::class.javaPrimitiveType) }.getOrNull()
@@ -112,15 +132,8 @@ object BarState {
             .onFailure { runCatching { touchMethod?.invoke(l, index) } }
     }
 
-    private fun ensureFields(loader: ClassLoader?) {
-        if (fieldsReady) return
-        fieldsReady = true
-        runCatching {
-            val cl = loader ?: this::class.java.classLoader ?: return
-            val cls = cl.loadClass("com.xunmeng.pinduoduo.home.base.entity.HomeBottomTab")
-            groupField = cls.getField("group")
-            dotMethod = try { cls.getMethod("showRedDot") } catch (_: Throwable) { null }
-        }
-    }
-
+    private var hostListener: Any? = null
+    private var selectMethod: Method? = null
+    private var touchMethod: Method? = null
+    private var doubleTapMethod: Method? = null
 }

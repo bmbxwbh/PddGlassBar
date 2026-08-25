@@ -67,7 +67,7 @@ object GlassBarHooks {
                     val tv = f.thisObject as? View
                     val p = tv?.parent as? ViewGroup
                     if (p != null && p.findViewWithTag<View>(GlassOverlay.TAG) != null)
-                        BarState.vanish(tv)
+                        tv.visibility = View.GONE
                 }
             }
             ok()
@@ -106,7 +106,7 @@ object GlassBarHooks {
                     val p = v.parent as? ViewGroup ?: return@hookAfter
                     if (p.findViewWithTag<View>(GlassOverlay.TAG) != null &&
                         (v.visibility != View.GONE || v.alpha != 0f)
-                    ) BarState.vanish(v)
+                    ) v.visibility = View.GONE
                 }
             }
             ok()
@@ -119,7 +119,7 @@ object GlassBarHooks {
                 b.hookAfter(m) { f ->
                     val v = f.thisObject as? View ?: return@hookAfter
                     val p = v.parent as? ViewGroup ?: return@hookAfter
-                    if (p.findViewWithTag<View>(GlassOverlay.TAG) != null) BarState.vanish(v)
+                    if (p.findViewWithTag<View>(GlassOverlay.TAG) != null) v.visibility = View.GONE
                 }
             }
             ok()
@@ -133,7 +133,7 @@ object GlassBarHooks {
                 b.hookAfter(m) { f ->
                     val v = f.thisObject as? View ?: return@hookAfter
                     val p = v.parent as? ViewGroup ?: return@hookAfter
-                    if (p.findViewWithTag<View>(GlassOverlay.TAG) != null) BarState.vanish(v)
+                    if (p.findViewWithTag<View>(GlassOverlay.TAG) != null) v.visibility = View.GONE
                 }
             }
             phCls.declaredMethods.firstOrNull { it.name == "onAttachedToWindow" }?.let { m ->
@@ -141,7 +141,7 @@ object GlassBarHooks {
                 b.hookAfter(m) { f ->
                     val v = f.thisObject as? View ?: return@hookAfter
                     val p = v.parent as? ViewGroup ?: return@hookAfter
-                    if (p.findViewWithTag<View>(GlassOverlay.TAG) != null) BarState.vanish(v)
+                    if (p.findViewWithTag<View>(GlassOverlay.TAG) != null) v.visibility = View.GONE
                 }
             }
             ok()
