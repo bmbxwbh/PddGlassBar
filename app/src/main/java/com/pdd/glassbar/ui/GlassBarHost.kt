@@ -44,9 +44,6 @@ private val LIGHT_BG = Color(0xFFF7F7F7)
 fun GlassBarHost(sourceView: View) {
     val dark = isSystemInDarkTheme()
 
-    // 订阅图标缓存/红点变化(ConcurrentHashMap 不可观察, 用版本号 tick 驱动重组)
-    val ticks by remember { derivedStateOf { BarState.iconTick + BarState.dotTick } }
-
     MaterialTheme(
         colorScheme = if (dark) {
             darkColorScheme(primary = PDD_RED, background = DARK_BG)

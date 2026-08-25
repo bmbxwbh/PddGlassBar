@@ -23,7 +23,10 @@ object BarState {
     private var groupField: java.lang.reflect.Field? = null
     private var fieldsReady = false
 
-    private var hostListener: Any? = null    private var selectMethod: Method? = null    private var touchMethod: Method? = null    private var doubleTapMethod: Method? = null
+    private var hostListener: Any? = null
+    private var selectMethod: Method? = null
+    private var touchMethod: Method? = null
+    private var doubleTapMethod: Method? = null
 
     val tabs = mutableStateListOf<TabUi>()
     val dots = mutableStateListOf<Boolean>()
