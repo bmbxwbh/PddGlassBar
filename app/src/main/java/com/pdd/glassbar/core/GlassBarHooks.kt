@@ -54,6 +54,18 @@ object GlassBarHooks {
             b.hookBefore(m) { f ->
                 @Suppress("UNCHECKED_CAST")
                 BarState.syncTabs(f.args.getOrNull(0) as? List<Any?>, f.member?.javaClass?.classLoader ?: b.hostClassLoader)
+                // 皮肤刷新流程会重新 add 新的 PddTabView —— 每次同步时强制再隐藏一次
+                runCatching {
+                    val tv = f.thisObject as? android.view.View
+                    val p = tv?.parent as? ViewGroup ?: return
+                    if (p.findViewWithTag<View>(com.pdd.glassbar.ui.GlassOverlay.TAG) != null) {
+                        tv.visibility = View.GONE
+                        for (i in 0 until p.childCount) {
+                            val c = p.getChildAt(i)
+                            if (c.javaClass.name.endsWith("PddTabPlaceholderLayout")) c.visibility = View.GONE
+                        }
+                    }
+                }
             }
         }.onFailure { b.log(it) }
 
@@ -96,6 +108,18 @@ object GlassBarHooks {
                     src.copy(android.graphics.Bitmap.Config.ARGB_8888, false)?.asImageBitmap()
                 }.getOrNull() ?: return@hookAfter
                 BarState.putIcon(url, safe)
+            }
+        }.onFailure { b.log(it) }
+
+        // ---- 新实例守卫: 任何 PddTabView 在已注入容器内挂载时立即隐藏 ----
+        runCatching {
+            val m = tabCls.methods.first { it.name == "onAttachedToWindow" }
+            b.hookAfter(m) { f ->
+                val v = f.thisObject as? android.view.View ?: return@hookAfter
+                val p = v.parent as? ViewGroup ?: return@hookAfter
+                if (p.findViewWithTag<View>(com.pdd.glassbar.ui.GlassOverlay.TAG) != null) {
+                    v.visibility = android.view.View.GONE
+                }
             }
         }.onFailure { b.log(it) }
 

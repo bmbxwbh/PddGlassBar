@@ -19,7 +19,7 @@ import java.io.File
  */
 object GlassOverlay {
 
-    private const val TAG = "pdd_glass_bar_compose"
+    const val TAG = "pdd_glass_bar_compose"
     private val KILL_SWITCH = File("/sdcard/pddglassbar.disable")
 
     fun install(container: ViewGroup, tabCls: Class<*>, activity: Activity?) {

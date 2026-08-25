@@ -78,7 +78,7 @@ fun GlassBarHost(sourceView: View) {
 
                     val isSelected = index == BarState.selected
                     val url = if (isSelected) item.selectedUrl ?: item.normalUrl else item.normalUrl
-                    val bmp = url?.let { BarState.icons[it] }
+                    val bmp = BarState.resolveIcon(url)
                     BadgedBox(
                         badge = {
                             if (!isSelected && BarState.dots.getOrNull(index) == true) {

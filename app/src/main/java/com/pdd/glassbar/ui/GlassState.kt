@@ -34,6 +34,9 @@ object BarState {
 
     /** URL → 已解码图标(PddTabView.j 加载回调捕获)。 */
     internal val icons = ConcurrentHashMap<String, ImageBitmap>()
+    private val iconsByBase = ConcurrentHashMap<String, ImageBitmap>()
+
+    private fun baseOf(url: String) = url.substringBefore("?").substringAfterLast("/")
 
     // ---- 原生侧引用(用于把玻璃栏的点击路由回宿主) ----
     private var hostListener: Any? = null
@@ -46,7 +49,17 @@ object BarState {
 
     fun putIcon(url: String, bmp: ImageBitmap) {
         icons[url] = bmp
+        iconsByBase[baseOf(url)] = bmp
         iconTick++
+    }
+
+    fun resolveIcon(rawUrl: String?): ImageBitmap? {
+        if (rawUrl == null) return null
+        icons[rawUrl]?.let { return it }
+        // PDD 会给 URL 拼 CDN 参数, 精确键可能 miss —— 退化为按文件名匹配
+        val b = baseOf(rawUrl)
+        iconsByBase[b]?.let { return it }
+        return icons.entries.firstOrNull { it.key.contains(b) }?.value
     }
 
     /** H2: setTabs 拦截 —— 服务端每次下发都重新同步。 */
