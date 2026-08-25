@@ -28,8 +28,8 @@ object GlassBarHooks {
         val containerCls = cl.loadClass(CONTAINER)
 
         // ---- H1: 注入玻璃栏 overlay(双锚点: initView + 构造器兜底) ----
-        val trigger: (Any?) -> Unit = { obj ->
-            val container = obj as? ViewGroup ?: return@trigger
+        fun trigger(obj: Any?) {
+            val container = obj as? ViewGroup ?: return
             runCatching {
                 GlassOverlay.install(container, tabCls, container.context.findActivity())
             }.onFailure { b.log(it) }
