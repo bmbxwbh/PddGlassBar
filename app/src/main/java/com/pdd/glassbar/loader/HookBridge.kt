@@ -9,7 +9,7 @@ import java.lang.reflect.Member
  * - after 阶段: [originalResult] 为原方法返回值; 给 [result] 赋非 [UNCHANGED] 值可改写返回值
  */
 class HookFrame(
-    val member: Member,
+    val member: Member?,
     val thisObject: Any?,
     var args: Array<Any?>,
 ) {

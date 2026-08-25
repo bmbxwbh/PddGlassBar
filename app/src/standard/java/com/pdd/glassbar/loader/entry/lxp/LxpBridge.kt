@@ -43,6 +43,6 @@ class LxpBridge(
     }
 
     override fun log(message: String) {
-        try { self.log("[PddGlassBar] $message") } catch (_: Throwable) {}
+        try { self.log(android.util.Log.INFO, "PddGlassBar", message, null) } catch (_: Throwable) {}
     }
 }
