@@ -165,7 +165,33 @@ object GlassBarHooks {
             }
         }.onFailure { b.log(it) }
 
-        // ---- 新实例守卫: 任何 PddTabView 在已注入容器内挂载时立即隐藏 ----
+        // ---- 骨架屏压制: PddTabPlaceholderLayout 走独立绘制路径, 单独覆盖 ----
+        runCatching {
+            val phCls = cl.loadClass("$TAB_VIEW_PKG.PddTabPlaceholderLayout")
+            val dc = (phCls.declaredMethods.firstOrNull { it.name == "drawCanvas" }
+                ?: phCls.methods.firstOrNull { it.name == "drawCanvas" })
+            if (dc != null) {
+                dc.isAccessible = true
+                b.hookAfter(dc) { f ->
+                    val v = f.thisObject as? android.view.View ?: return@hookAfter
+                    val p = v.parent as? ViewGroup ?: return@hookAfter
+                    if (p.findViewWithTag<View>(com.pdd.glassbar.ui.GlassOverlay.TAG) != null &&
+                        v.visibility != android.view.View.GONE
+                    ) v.visibility = android.view.View.GONE
+                }
+            }
+            val at = phCls.methods.firstOrNull { it.name == "onAttachedToWindow" }
+            if (at != null) {
+                b.hookAfter(at) { f ->
+                    val v = f.thisObject as? android.view.View ?: return@hookAfter
+                    val p = v.parent as? ViewGroup ?: return@hookAfter
+                    if (p.findViewWithTag<View>(com.pdd.glassbar.ui.GlassOverlay.TAG) != null)
+                        v.visibility = android.view.View.GONE
+                }
+            }
+        }.onFailure { b.log(it) }
+
+$1: 任何 PddTabView 在已注入容器内挂载时立即隐藏 ----
         runCatching {
             val m = tabCls.methods.first { it.name == "onAttachedToWindow" }
             b.hookAfter(m) { f ->

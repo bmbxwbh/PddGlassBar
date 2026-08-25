@@ -42,8 +42,15 @@ object BarState {
     class IconBinding(val imageUrl: String?, val gifUrl: String?)
     private val boundByTab = java.util.concurrent.ConcurrentHashMap<Int, IconBinding>()
 
+    private var bindLogCount = 0
+
     fun bindIconUrl(tab: Any, imageUrl: String?, gifUrl: String?) {
         boundByTab[System.identityHashCode(tab)] = IconBinding(imageUrl, gifUrl)
+        if (bindLogCount < 12) {
+            bindLogCount++
+            runCatching { com.pdd.glassbar.loader.PddLoader.bridge.log(
+                "bind#" + bindLogCount + " img=" + (imageUrl?.take(60) ?: "null") + " gif=" + (gifUrl?.take(40) ?: "null")) }
+        }
     }
 
     // ---- 原生侧引用(用于把玻璃栏的点击路由回宿主) ----
@@ -123,10 +130,8 @@ object BarState {
         }
     }
 
-    /** 玻璃栏渲染取图标: 绑定 URL 优先, 实体字段与文件名匹配兜底。 */
+    /** 玻璃栏渲染取图标: 运行时捕获(绑定URL)最优先, 收割位图仅作首帧兜底。 */
     fun resolveIconFor(index: Int, selected: Boolean): ImageBitmap? {
-        // ① 安装期收割的原生位图(首帧即时可用)
-        nativeByIndex[index]?.let { return it }
         val raw = synchronized(rawTabs) { rawTabs.getOrNull(index) }
         val binding = raw?.let { boundByTab[System.identityHashCode(it)] }
         val candidates = buildList {
@@ -145,7 +150,8 @@ object BarState {
                 icons.entries.firstOrNull { it.key.contains(bs) }?.let { return it.value }
             }
         }
-        return null
+        // 末位兜底: 安装期收割(动态 tab 此刻可能是占位图, 会被上方运行时捕获自然覆盖)
+        return nativeByIndex[index]
     }
 
     /** 每次 PddTabView.drawCanvas 后调用 —— 轻量读取红点状态。 */
