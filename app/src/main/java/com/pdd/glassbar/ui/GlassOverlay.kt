@@ -14,7 +14,6 @@ import com.pdd.glassbar.core.AppProfile
 import com.pdd.glassbar.core.TabMatchMode
 import com.pdd.glassbar.loader.GlassLoader
 import com.pdd.glassbar.ui.utils.LifecycleOwnerProvider
-import com.pdd.glassbar.ui.utils.setLifecycleOwner
 import java.io.File
 
 object GlassOverlay {
@@ -27,14 +26,8 @@ object GlassOverlay {
         File("/sdcard/pddglassbar.disable")
     )
 
-    private fun checkFlag(): Boolean {
-        val f = KILL_SWITCH_CANDIDATES.firstOrNull { it.exists() } ?: return true
-        val v = GlassFlags.load(f)
-        return v == "on" || v == "noglass" || v == "noicons"
-    }
-
     fun install(container: ViewGroup, profile: AppProfile, activity: Activity?) {
-        if (!checkFlag()) return
+        if (!checkFlag()) { log("kill-switch/skip"); return }
         if (container.findViewWithTag<View>(TAG) != null) return
         val ctx = activity ?: container.context
         runCatching { ModuleFileLog.init(ctx) }
@@ -48,22 +41,17 @@ object GlassOverlay {
             when {
                 c is ViewGroup && c !is ComposeView && content == null &&
                     c.javaClass.name == "android.widget.FrameLayout" -> content = c
-                profile.placeholderSuffix != null &&
-                    c.javaClass.name.endsWith(profile.placeholderSuffix) -> targets += c
-                profile.tabViewClass != null && c.javaClass.name == profile.tabViewClass -> {
-                    tabView = c; targets += c
-                }
-                c.javaClass == View::class.java -> targets += c
+                c.javaClass.name.endsWith("PddTabPlaceholderLayout") -> targets += c
+                c.javaClass.name == profile.tabViewClass -> { tabView = c; targets += c }
+                c is View && c.javaClass == View::class.java -> targets += c
             }
         }
-        GlassLoader.bridge.log("install/classified hide=${targets.size}")
-        doActivate(attachTo = container, profile, activity,
-                   sourceView = content, tabView = tabView,
-                   toTransparent = targets, independent = null)
+        log("classified hide=${targets.size}")
+        doActivate(container, profile, activity, content, tabView, targets)
     }
 
     fun installByScan(activity: Activity, profile: AppProfile) {
-        if (!checkFlag()) return
+        if (!checkFlag()) { log("scan kill-switch/skip"); return }
         ModuleFileLog.init(activity)
         runCatching { CrashCapture.install(activity) }
         val root = activity.window?.decorView ?: return
@@ -76,22 +64,34 @@ object GlassOverlay {
                 }
             ) tabViews += v
         }
-        GlassLoader.bridge.log("install/scan tabs=${tabViews.size}")
-        if (tabViews.isEmpty()) return
+        log("scan tabs=${tabViews.size}")
+        if (tabViews.isEmpty()) { log("scan-no-match"); return }
         tabViews.sortBy { it.x + it.left.toFloat() }
-        doActivate(attachTo = root as ViewGroup, profile, activity,
-                   sourceView = null, tabView = tabViews.first(),
-                   toTransparent = tabViews.toList(), independent = tabViews)
+
+        doActivate(root as ViewGroup, profile, activity, null,
+                   tabViews.first(), tabViews.toList())
     }
 
-    private fun doActivate(
+    private fun checkFlag(): Boolean {
+        val f = KILL_SWITCH_CANDIDATES.firstOrNull { it.exists() } ?: return true
+        val v = GlassFlags.load(f)
+        return v == "on" || v == "noglass" || v == "noicons"
+    }
+
+    private fun walk(v: View, depth: Int, visit: (View, Int) -> Unit) {
+        visit(v, depth)
+        if (v is ViewGroup) {
+            for (i in 0 until v.childCount) walk(v.getChildAt(i), depth + 1, visit)
+        }
+    }
+
+    private fun activate(
         attachTo: ViewGroup,
         profile: AppProfile,
         activity: Activity?,
         sourceView: ViewGroup?,
         tabView: View?,
-        toTransparent: List<View>,
-        independent: List<View>?
+        toTransparent: List<View>
     ) {
         var composeView: ComposeView? = null
         try {
@@ -113,7 +113,7 @@ object GlassOverlay {
                 setLifecycleOwner(ourOwner)
                 setContent { GlassBarHost(sourceView = sourceView) }
             }
-            GlassLoader.bridge.log("install/compose-created")
+            log("compose-created")
 
             toTransparent.forEach { it.alpha = 0f }
             attachTo.clipChildren = false
@@ -125,23 +125,35 @@ object GlassOverlay {
                 ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply { addRule(RelativeLayout.ALIGN_PARENT_BOTTOM) }
             attachTo.addView(composeView, lp)
-            GlassLoader.bridge.log("install/attached")
+            log("attached")
+
+            if (profile.useSnapshot && tabView != null) {
+                tabView.postDelayed({
+                    runCatching {
+                        val slots = BarState.tabs.size.coerceAtLeast(1)
+                        val saved = tabView.alpha
+                        tabView.alpha = 1f
+                        Snapshot.harvest(tabView, slots)
+                        tabView.alpha = saved
+                        log("snapshot slots=" + slots)
+                    }
+                }, 400)
+            }
         } catch (t: Throwable) {
             runCatching {
-                toTransparent.forEach { it.alpha = 1f; it.visibility = android.view.View.VISIBLE }
+                toTransparent.forEach { it.alpha = 1f; it.visibility = View.VISIBLE }
                 composeView?.let { attachTo.removeView(it) }
                 attachTo.clipChildren = true
                 attachTo.clipToPadding = true
             }
-            GlassLoader.bridge.log(t)
-            GlassLoader.bridge.log("install FAILED -> rolled back")
+            runCatching {
+                GlassLoader.bridge.log(t)
+                GlassLoader.bridge.log("install FAILED -> rolled back")
+            }
         }
     }
 
-    private inline fun walk(v: View, depth: Int, visit: (View, Int) -> Unit) {
-        visit(v, depth)
-        if (v is ViewGroup) {
-            for (i in 0 until v.childCount) walk(v.getChildAt(i), depth + 1, visit)
-        }
+    private fun log(stage: String) {
+        runCatching { GlassLoader.bridge.log("install/" + stage) }
     }
 }

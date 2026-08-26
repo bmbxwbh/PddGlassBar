@@ -2,13 +2,13 @@ package com.pdd.glassbar.core
 
 import android.view.View
 import android.view.ViewGroup
+import com.pdd.glassbar.core.AppProfile.AnchorMode
 import com.pdd.glassbar.loader.HookBridge
 import com.pdd.glassbar.ui.BarState
 import com.pdd.glassbar.ui.GlassOverlay
 import com.pdd.glassbar.ui.Snapshot
 import com.pdd.glassbar.ui.utils.findActivity
 
-/** 通用引擎: 按 Profile 路由锚点模式并安装只读镜像/透明化守卫。 */
 object GlassBarHooks {
 
     fun install(b: HookBridge, profile: AppProfile) {
@@ -19,7 +19,6 @@ object GlassBarHooks {
         fun ok() { hookIdx++; b.log("hook/$hookIdx ok") }
         fun fail(name: String, t: Throwable) { b.log("hook/$name FAILED"); b.log(t) }
 
-        // ---- 镜像入口(只读) ----
         profile.mirrorMethodName?.let { mName ->
             runCatching {
                 val m = tabCls!!.methods.first { it.name == mName }
@@ -76,7 +75,6 @@ object GlassBarHooks {
                 }
                 ok()
 
-                // 家族成员挂载守卫
                 val suffixes = profile.tabViewSimpleNameSuffixes
                 val phSuffix = profile.placeholderSuffix
                 actCls.getDeclaredMethod("onAttachedToWindow").let { base ->
