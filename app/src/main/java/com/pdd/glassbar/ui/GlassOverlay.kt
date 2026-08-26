@@ -13,6 +13,8 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.pdd.glassbar.core.AppProfile
 import com.pdd.glassbar.hooks.BiliGlassContent
 import com.pdd.glassbar.loader.GlassLoader
+import com.pdd.glassbar.ui.utils.LifecycleOwnerProvider
+import com.pdd.glassbar.ui.utils.setLifecycleOwner
 import java.io.File
 
 object GlassOverlay {
@@ -59,7 +61,7 @@ object GlassOverlay {
         val root = activity.window?.decorView as? ViewGroup ?: return
 
         var barView: ViewGroup? = null
-        findBottomStrip(root, 0) { v ->
+        walk(root, 0) { v, _ ->
             if (barView == null && v is ViewGroup && v.visibility == View.VISIBLE &&
                 v.width >= root.width * 9 / 10 &&
                 v.height > 0 && v.height < root.height / 8
