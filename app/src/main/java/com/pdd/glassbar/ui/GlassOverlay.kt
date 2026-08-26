@@ -5,9 +5,13 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.RelativeLayout
 import androidx.compose.ui.platform.ComposeView
+import androidx.lifecycle.ViewModelStoreOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeViewModelStoreOwner
+import androidx.savedstate.SavedStateRegistryOwner
+import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.pdd.glassbar.core.AppProfile
 import com.pdd.glassbar.loader.GlassLoader
-import com.pdd.glassbar.hooks.BiliHooks
 import java.io.File
 
 object GlassOverlay {
@@ -44,35 +48,31 @@ object GlassOverlay {
         }
         val sv = content ?: return
         log("classified hide=${targets.size}")
-        doActivate(attachTo = container, sourceView = sv, tabView = tabView,
-                   extras = targets, activity = activity)
+        activate(attachTo = container, sourceView = sv, tabView = tabView,
+                 extras = targets, activity = activity)
     }
 
     fun installByScan(activity: Activity, profile: AppProfile) {
         if (!checkFlag()) { log("scan kill-switch/skip"); return }
         ModuleFileLog.init(activity)
+        runCatching { CrashCapture.install(activity) }
         val root = activity.window?.decorView as? ViewGroup ?: return
         log("scan screen=${root.width}x${root.height}")
 
-        // 位置启发式: 找屏幕底部区域的全宽 ViewGroup 作为底栏
         var barView: ViewGroup? = null
-        findBottomStrip(root, 0, root.height) { v ->
-            if (barView == null && v is ViewGroup &&
-                v.visibility == View.VISIBLE &&
+        findBottomStrip(root, 0) { v ->
+            if (barView == null && v is ViewGroup && v.visibility == View.VISIBLE &&
                 v.width >= root.width * 9 / 10 &&
                 v.height > 0 && v.height < root.height / 8
             ) barView = v
         }
         val bar = barView ?: run { log("scan-no-bar"); return }
         log("scan-found cls=" + bar.javaClass.simpleName + " h=" + bar.height)
-
-        // alpha=0 隐藏原栏(保留布局供合成触摸)
         bar.alpha = 0f
 
-        // 挂载玻璃栏到 DecorView 底部
         val cv = ComposeView(activity).apply {
-            tag = TAG
-            clipChildren = false; clipToPadding = false
+            tag = TAG; clipChildren = false; clipToPadding = false
+            setLifecycleOwner(com.pdd.glassbar.ui.utils.LifecycleOwnerProvider.getOrCreate(activity))
             setContent { com.pdd.glassbar.hooks.BiliGlassContent() }
         }
         log("compose-created")
@@ -87,21 +87,19 @@ object GlassOverlay {
 
     private fun checkFlag(): Boolean {
         val f = KILL_SWITCH_CANDIDATES.firstOrNull { it.exists() } ?: return true
-        val v = GlassFlags.load(f)
+        val v = com.pdd.glassbar.ui.GlassFlags.load(f)
         return v == "on" || v == "noglass" || v == "noicons"
     }
 
-    private fun findBottomStrip(v: View, depth: Int, scrH: Int, visit: (View) -> Unit) {
+    private fun findBottomStrip(v: View, depth: Int, visit: (View) -> Unit) {
         if (depth > 14 || !v.isShown) return
         visit(v)
         if (v is ViewGroup) {
-            for (i in 0 until v.childCount) {
-                findBottomStrip(v.getChildAt(i), depth + 1, scrH, visit)
-            }
+            for (i in 0 until v.childCount) findBottomStrip(v.getChildAt(i), depth + 1, visit)
         }
     }
+}
 
     private fun log(msg: String) {
-        runCatching { GlassLoader.bridge.log("install/$msg") }
+        runCatching { GlassLoader.bridge.log("overlay/" + msg) }
     }
-}

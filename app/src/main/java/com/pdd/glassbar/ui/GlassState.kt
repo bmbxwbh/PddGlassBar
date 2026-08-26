@@ -13,7 +13,6 @@ object BarState {
     data class TabUi(val title: String, val group: Int)
 
     val tabs = mutableStateListOf<TabUi>()
-    val dots = mutableStateListOf<Boolean>()
     var selected by mutableIntStateOf(0)
         private set
 
@@ -21,17 +20,15 @@ object BarState {
     private var selectMethod: Method? = null
     private var groupField: Field? = null
     private var fieldsReady = false
-    private val hiddenViews = mutableListOf<View>()
 
     fun markSelected(idx: Int) {
         if (idx in tabs.indices) selected = idx
         runCatching { selectMethod?.invoke(hostListener, idx) }
+            .onFailure { e -> com.pdd.glassbar.loader.GlassLoader.bridge.log(e) }
     }
 
-    /** H2 别名: 过滤并同步。 */
     fun mirrorFrom(rawList: List<Any?>?) {
         if (rawList.isNullOrEmpty()) return
-        synchronized(this@BarState) { /* no-op */ }
         if (!fieldsReady) {
             fieldsReady = true
             val cls = rawList.firstNotNullOfOrNull { it }?.javaClass ?: return
@@ -42,12 +39,15 @@ object BarState {
         rawList.filterNotNull().forEachIndexed { i, t ->
             val g = gf?.let { f -> runCatching { (f.get(t) as? Number)?.toInt() }.getOrNull() } ?: -1
             val title = runCatching {
-                (titleField?.get(t) as? String)?.takeIf { it.isNotBlank() }
+                javaClass.getDeclaredMethod("getTitleFallback", Int::class.java)
+                    .invoke(this, g) as? String
             }.getOrNull() ?: "Tab${i+1}"
-            tabs.add(TabUi(title, g, i))
+            tabs.add(TabUi(title, g))
         }
         if (selected >= tabs.size) selected = 0
     }
+
+    fun getTitleFallback(group: Int): String? = null
 
     fun registerHidden(v: View) {
         v.alpha = 0f
@@ -55,7 +55,7 @@ object BarState {
 
     fun reassertHidden() { /* 周期性由 Host 调用 */ }
 
-    /** H3: 绑定原生 g_1 监听器(用于点击路由)。 */
+    /** H3: 绑定原生监听器(用于点击路由)。 */
     fun bindListener(original: Any, g1Class: Class<*>) {
         hostListener = original
         selectMethod = runCatching {
@@ -65,7 +65,6 @@ object BarState {
 
     /** 玻璃栏点击 → 调原生 onTabSelected 切页。 */
     fun requestSelect(displayIdx: Int) {
-        runCatching { selectMethod?.invoke(hostListener, displayIdx) }
-            .onFailure { GlassLoader.bridge.log(it) }
+        markSelected(displayIdx)
     }
 }
