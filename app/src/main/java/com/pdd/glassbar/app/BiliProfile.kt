@@ -14,5 +14,5 @@ val BiliProfile = AppProfile(
     mirrorMethodName = null,
     fixedTabsInOrder = listOf("首页", "动态", "会员购", "消息", "我的"),
     useSnapshot = true,
-    experimental = true,
+    experimental = false,
 )

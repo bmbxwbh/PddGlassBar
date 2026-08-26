@@ -1,9 +1,6 @@
 <resources>
     <string-array name="xposed_scope">
         <item>com.xunmeng.pinduoduo</item>
-        <item>com.sina.weibo</item>
         <item>tv.danmaku.bili</item>
-        <item>com.taobao.idlefish</item>
-        <item>com.xingin.xhs</item>
     </string-array>
 </resources>
