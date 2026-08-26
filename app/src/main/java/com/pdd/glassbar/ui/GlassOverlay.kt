@@ -5,7 +5,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.RelativeLayout
 import androidx.compose.ui.platform.ComposeView
-import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
@@ -14,64 +13,59 @@ import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.pdd.glassbar.core.AppProfile
 import com.pdd.glassbar.loader.GlassLoader
 import com.pdd.glassbar.ui.utils.LifecycleOwnerProvider
-import com.pdd.glassbar.ui.utils.setLifecycleOwner
 import java.io.File
 
 object GlassOverlay {
 
     const val TAG = "pdd_glass_bar_compose"
+
     private val KILL_SWITCH_CANDIDATES = listOf(
         File("/sdcard/Android/data/com.xunmeng.pinduoduo/files/pddglassbar.disable"),
         File("/data/data/com.xunmeng.pinduoduo/files/pddglassbar.disable"),
-        File("/sdcard/pddglassbar.disable"),
+        File("/sdcard/pddglassbar.disable")
     )
 
     fun install(container: ViewGroup, profile: AppProfile, activity: Activity?) {
         val ctx = activity ?: container.context
-        if (!checkFlag()) return
+        if (!checkFlag()) { log("kill-switch/skip"); return }
         if (container.findViewWithTag<View>(TAG) != null) return
         runCatching { ModuleFileLog.init(ctx) }
         runCatching { CrashCapture.install(ctx) }
 
         var content: ViewGroup? = null
         var tabView: View? = null
-        val toTransparent = mutableListOf<View>()
+        val targets = mutableListOf<View>()
         for (i in 0 until container.childCount) {
             val c = container.getChildAt(i)
             when {
                 c is ViewGroup && c !is ComposeView && content == null &&
                     c.javaClass.name == "android.widget.FrameLayout" -> content = c
-                profile.placeholderSuffix != null &&
-                    c.javaClass.name.endsWith(profile.placeholderSuffix!!) -> toTransparent += c
-                profile.tabViewClass != null && c.javaClass.name == profile.tabViewClass -> {
-                    tabView = c; toTransparent += c
-                }
-                c.javaClass == View::class.java -> toTransparent += c
+                c.javaClass.name.endsWith("PddTabPlaceholderLayout") -> targets += c
+                c.javaClass.name == profile.tabViewClass -> { tabView = c; targets += c }
+                c.javaClass == View::class.java -> targets += c
             }
         }
-        log("classified hide=${toTransparent.size} content=${content != null}")
-        activate(container, profile, activity, content, tabView, toTransparent)
+        log("classified hide=${targets.size} content!=null:${content != null}")
+        activate(container, profile, activity, content, tabView, targets)
     }
 
     fun installByScan(activity: Activity, profile: AppProfile) {
-        if (!checkFlag()) return
+        if (!checkFlag()) { log("scan kill-switch/skip"); return }
         runCatching { ModuleFileLog.init(activity) }
         runCatching { CrashCapture.install(activity) }
-        val root = activity.window?.decorView ?: return
+        val decor = activity.window?.decorView ?: return
 
         val tabViews = mutableListOf<View>()
-        walk(root, 0) { v, _ ->
-            if (profile.tabMatchMode == com.pdd.glassbar.core.TabMatchMode.SIMPLE_NAME_SUFFIXES &&
+        walk(decor, 0) { v, _ ->
+            if (profile.tabMatchMode == TabMatchMode.SIMPLE_NAME_SUFFIXES &&
                 profile.tabViewSimpleNameSuffixes.any { v.javaClass.simpleName.endsWith(it) }
             ) tabViews += v
         }
-        log("scan tabs=${tabViews.size}")
-        if (tabViews.isEmpty()) return
+        log("scan tabs=" + tabViews.size)
+        if (tabViews.isEmpty()) { log("scan-no-match"); return }
         tabViews.sortBy { it.x + it.left.toFloat() }
 
-        activate(activity.window?.decorView as? ViewGroup ?: return, profile, activity,
-                 sourceView = null, tabView = tabViews.first(),
-                 toTransparent = tabViews.toList())
+        activate(decor as ViewGroup, profile, activity, null, tabViews.first(), tabViews.toList())
     }
 
     private fun checkFlag(): Boolean {
@@ -82,7 +76,9 @@ object GlassOverlay {
 
     private fun walk(v: View, depth: Int, visit: (View, Int) -> Unit) {
         visit(v, depth)
-        if (v is ViewGroup) for (i in 0 until v.childCount) walk(v.getChildAt(i), depth + 1)
+        if (v is ViewGroup) {
+            for (i in 0 until v.childCount) walk(v.getChildAt(i), depth + 1, visit)
+        }
     }
 
     private fun activate(
@@ -91,7 +87,7 @@ object GlassOverlay {
         activity: Activity?,
         sourceView: ViewGroup?,
         tabView: View?,
-        toTransparent: List<View>,
+        toTransparent: List<View>
     ) {
         var composeView: ComposeView? = null
         try {
@@ -99,8 +95,12 @@ object GlassOverlay {
                 ?: LifecycleOwnerProvider.lifecycleOwner
             val decor: View = activity?.window?.decorView ?: attachTo.rootView
             decor.setViewTreeLifecycleOwner(ourOwner)
-            if (ourOwner is ViewModelStoreOwner) decor.setViewTreeViewModelStoreOwner(ourOwner)
-            if (ourOwner is SavedStateRegistryOwner) decor.setViewTreeSavedStateRegistryOwner(ourOwner)
+            if (ourOwner is ViewModelStoreOwner) {
+                decor.setViewTreeViewModelStoreOwner(ourOwner)
+            }
+            if (ourOwner is SavedStateRegistryOwner) {
+                decor.setViewTreeSavedStateRegistryOwner(ourOwner)
+            }
 
             composeView = ComposeView(attachTo.context).apply {
                 tag = TAG
@@ -111,14 +111,14 @@ object GlassOverlay {
             }
             log("compose-created")
 
-            toTransparent.forEach { it.alpha = 0f }   // 纯透明: 保留布局供合成触摸
+            toTransparent.forEach { it.alpha = 0f }
             attachTo.clipChildren = false
             attachTo.clipToPadding = false
             sourceView?.clipChildren = false
 
             val lp = RelativeLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT
             ).apply { addRule(RelativeLayout.ALIGN_PARENT_BOTTOM) }
             attachTo.addView(composeView, lp)
             log("attached")
@@ -131,13 +131,13 @@ object GlassOverlay {
                         tabView.alpha = 1f
                         Snapshot.harvest(tabView, slots)
                         tabView.alpha = saved
-                        log("snapshot slots=$slots")
+                        log("snapshot slots=" + slots)
                     }
                 }, 400)
             }
         } catch (t: Throwable) {
             runCatching {
-                toTransparent.forEach { it.alpha = 1f }
+                toTransparent.forEach { it.alpha = 1f; it.visibility = View.VISIBLE }
                 composeView?.let { attachTo.removeView(it) }
                 attachTo.clipChildren = true
                 attachTo.clipToPadding = true
@@ -150,6 +150,6 @@ object GlassOverlay {
     }
 
     private fun log(stage: String) {
-        runCatching { GlassLoader.bridge.log("install/$stage") }
+        runCatching { GlassLoader.bridge.log("install/" + stage) }
     }
 }
