@@ -13,6 +13,7 @@ object BarState {
     data class TabUi(val title: String, val group: Int)
 
     val tabs = mutableStateListOf<TabUi>()
+    val dots = mutableStateListOf<Boolean>()
     var selected by mutableIntStateOf(0)
         private set
 

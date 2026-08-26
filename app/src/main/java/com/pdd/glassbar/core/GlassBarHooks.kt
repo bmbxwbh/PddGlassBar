@@ -43,7 +43,7 @@ object GlassBarHooks {
                     b.hookAfter(im) { f ->
                         val c = f.thisObject as? ViewGroup ?: return@hookAfter
                         c.post { runCatching {
-                            GlassOverlay.install(c, tabCls, c.context.findActivity())
+                            GlassOverlay.install(c, profile, c.context.findActivity())
                         }.onFailure { b.log(it) } }
                     }
                     ok()
