@@ -14,6 +14,7 @@ import com.pdd.glassbar.core.AppProfile
 import com.pdd.glassbar.core.TabMatchMode
 import com.pdd.glassbar.loader.GlassLoader
 import com.pdd.glassbar.ui.utils.LifecycleOwnerProvider
+import com.pdd.glassbar.ui.utils.setLifecycleOwner
 import java.io.File
 
 object GlassOverlay {
@@ -68,7 +69,7 @@ object GlassOverlay {
         val root = activity.window?.decorView ?: return
 
         val tabViews = mutableListOf<View>()
-        walk(root, 0) { v ->
+        walk(root, 0) { v, _ ->
             if (profile.tabMatchMode == TabMatchMode.SIMPLE_NAME_SUFFIXES &&
                 profile.tabViewSimpleNameSuffixes.any {
                     v.javaClass.simpleName.endsWith(it)
