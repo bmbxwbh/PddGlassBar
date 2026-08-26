@@ -14,6 +14,7 @@ import com.pdd.glassbar.core.AppProfile
 import com.pdd.glassbar.core.TabMatchMode
 import com.pdd.glassbar.loader.GlassLoader
 import com.pdd.glassbar.ui.utils.LifecycleOwnerProvider
+import com.pdd.glassbar.ui.utils.setLifecycleOwner
 import java.io.File
 
 object GlassOverlay {
@@ -85,7 +86,7 @@ object GlassOverlay {
         }
     }
 
-    private fun activate(
+    private fun doActivate(
         attachTo: ViewGroup,
         profile: AppProfile,
         activity: Activity?,

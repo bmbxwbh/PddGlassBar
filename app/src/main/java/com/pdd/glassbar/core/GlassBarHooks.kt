@@ -2,7 +2,7 @@ package com.pdd.glassbar.core
 
 import android.view.View
 import android.view.ViewGroup
-import com.pdd.glassbar.core.AppProfile.AnchorMode
+import com.pdd.glassbar.core.AnchorMode
 import com.pdd.glassbar.loader.HookBridge
 import com.pdd.glassbar.ui.BarState
 import com.pdd.glassbar.ui.GlassOverlay

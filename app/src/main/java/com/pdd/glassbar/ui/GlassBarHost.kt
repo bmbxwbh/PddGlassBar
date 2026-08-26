@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalView
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.compose.ui.platform.LocalView
 import com.pdd.glassbar.ui.content.FloatingBottomBar
 import com.pdd.glassbar.ui.content.FloatingBottomBarDefaults
 import com.pdd.glassbar.ui.content.FloatingBottomBarMode
@@ -41,8 +42,9 @@ private val LIGHT_UNSELECTED = Color(0xFF000000)
 private val DARK_UNSELECTED = Color(0xFFF2F2F2)
 
 @Composable
-fun GlassBarHost(sourceView: View) {
+fun GlassBarHost(sourceView: View?) {
     val dark = isSystemInDarkTheme()
+    // 无内容采样源时降级纯色底栏(mode=None), 此时 backdrop 不被消费
     val glassUsable = GlassFlags.glass && sourceView != null
     val owner = LocalLifecycleOwner.current
 
