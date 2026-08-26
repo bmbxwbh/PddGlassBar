@@ -52,7 +52,7 @@ object GlassOverlay {
         doActivate(container, profile, activity, sv, tabView, targets)
     }
 
-    fun installByScan(activity: Activity, profile: AppProfile) {
+    fun installByScan(activity: Activity) {
         if (!checkFlag()) return
         ModuleFileLog.init(activity)
         runCatching { CrashCapture.install(activity) }
