@@ -8,6 +8,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
 import com.pdd.glassbar.core.AppProfile
+import com.pdd.glassbar.core.DispatchMode
 import com.pdd.glassbar.loader.GlassLoader
 import java.lang.ref.WeakReference
 import java.lang.reflect.Field
@@ -41,6 +42,7 @@ object BarState {
         titleByGroup = p.titleByGroup
         groupReader = p.groupReader
         titleReader = p.titleReader
+        dispatchIndependent = p.dispatchMode == DispatchMode.INDEPENDENT_VIEWS
     }
 
     // ---- 隐藏视图(alpha=0 看门狗名单; 不用 GONE —— 保布局供合成触摸) ----
@@ -64,6 +66,15 @@ object BarState {
     fun bindTabView(v: View) {
         tabViewRef = WeakReference(v)
     }
+
+    private var tabViewsRef: WeakReference<List<View>>? = null
+
+    fun bindTabViews(views: List<View>) {
+        tabViewsRef = WeakReference(views.toList())
+    }
+
+    // 独立视图模式(闲鱼): true 时 requestSelect 直接对第 nativeIndex 个视图注入
+    var dispatchIndependent: Boolean = false
 
     // ---- 控制器(仅读 i 同步选中态) ----
     private var controllerRef: Any? = null
@@ -175,26 +186,33 @@ object BarState {
     // ---- 点击路由: 向原生子视图注入真实触摸 ----
     fun requestSelect(displayIdx: Int) {
         markSelected(displayIdx)
+        val t = tabs.getOrNull(displayIdx) ?: return
+
+        if (dispatchIndependent) {
+            // 闲鱼模式: 每个 tab 是独立顶层 View, 对其中心直接注入
+            val v = tabViewsRef?.get()?.getOrNull(t.nativeIndex) ?: return
+            dispatchTap(v, v.width / 2f, v.height / 2f, t.nativeIndex)
+            return
+        }
+
+        // PDD 模式: 单栏体子项定位
         val tv = tabViewRef?.get() as? ViewGroup ?: return
-        val nativeIdx = tabs.getOrNull(displayIdx)?.nativeIndex ?: return
+        val nativeIdx = t.nativeIndex
         if (nativeIdx < 0 || nativeIdx >= tv.childCount) return
         val child = tv.getChildAt(nativeIdx)
-
         val cLoc = IntArray(2); child.getLocationOnScreen(cLoc)
         val tLoc = IntArray(2); tv.getLocationOnScreen(tLoc)
-        val x = (cLoc[0] + child.width / 2f) - tLoc[0]
-        val y = (cLoc[1] + child.height / 2f) - tLoc[1]
+        dispatchTap(tv, (cLoc[0] + child.width / 2f) - tLoc[0],
+                    (cLoc[1] + child.height / 2f) - tLoc[1], nativeIdx)
+    }
 
+    private fun dispatchTap(v: View, x: Float, y: Float, idx: Int) {
         val now = android.os.SystemClock.uptimeMillis()
         runCatching {
-            tv.dispatchTouchEvent(
-                MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0)
-            )
-            val upAt = now + 60
-            tv.dispatchTouchEvent(
-                MotionEvent.obtain(upAt, upAt, MotionEvent.ACTION_UP, x, y, 0)
-            )
-            GlassLoader.bridge.log("tap->native idx=$nativeIdx")
+            v.dispatchTouchEvent(MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0))
+            val up = now + 60
+            v.dispatchTouchEvent(MotionEvent.obtain(up, up, MotionEvent.ACTION_UP, x, y, 0))
+            GlassLoader.bridge.log("tap->native idx=" + idx)
         }.onFailure { GlassLoader.bridge.log(it) }
     }
 }

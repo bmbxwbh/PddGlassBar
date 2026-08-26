@@ -1,75 +1,82 @@
 package com.pdd.glassbar.core
 
-import android.view.View
-import android.view.ViewGroup
 import androidx.compose.ui.platform.ComposeView
 
+enum class AnchorMode {
+    /** 容器类 initView 后注入(PDD 模式) */
+    CONTAINER_INITVIEW,
+    /** 主页 Activity onResume 后全树扫描匹配(闲鱼/微博/B站模式) */
+    ACTIVITY_RESUME_SCAN,
+}
+
+enum class TabMatchMode {
+    /** 单一底栏类精确全名 */
+    EXACT_CLASS,
+    /** 类简单名后缀集合(如 MainTabView 家族) */
+    SIMPLE_NAME_SUFFIXES,
+}
+
+enum class DispatchMode {
+    /** 单底栏栏体, 子项按 getChildAt(nativeIndex) 定位(PDD) */
+    BAR_CHILDREN,
+    /** 每个 tab 是独立顶层 View, 直接对该 View 注入(闲鱼) */
+    INDEPENDENT_VIEWS,
+}
+
 /**
- * 单个 App 的锚点与行为描述。
- * 引擎(GlassBarHooks/GlassOverlay)只读本描述, 不含任何 App 特例。
+ * 单个 App 的锚点与行为描述。引擎只读本描述, 不含任何 App 特例。
  */
 class AppProfile(
 
     val packageName: String,
     val label: String,
 
-    /** 底栏宿主容器(initView 所在或等价锚点所在类) */
-    val containerClass: String,
+    /** 锚点模式 */
+    val anchorMode: AnchorMode = AnchorMode.CONTAINER_INITVIEW,
 
-    /** 底栏视图类(null = 由 classify 兜底: 容器内最后一个非内容 ViewGroup) */
+    /** CONTAINER_INITVIEW: 底栏宿主容器(initView 所在类) */
+    val containerClass: String = "",
+
+    /** ACTIVITY_RESUME_SCAN: 主页 Activity 全名(仅该 Activity 触发扫描) */
+    val mainActivityClass: String = "",
+
+    /**
+     * 底栏视图定位:
+     *  EXACT_CLASS      → tabViewClass 全名唯一匹配
+     *  SIMPLE_NAME_SUFFIXES → 类简单名以任一后缀结尾即命中(可多个, 按容器顺序为索引)
+     */
+    val tabMatchMode: TabMatchMode = TabMatchMode.EXACT_CLASS,
     val tabViewClass: String? = null,
+    val tabViewSimpleNameSuffixes: List<String> = emptyList(),
 
     /** 骨架屏类后缀(可空) */
     val placeholderSuffix: String? = null,
 
-    /**
-     * 镜像入口方法名(挂在底栏类上, hookAfter 只读观察)。
-     * null = 无此入口(固定页模式, 直接用 fixedTabs 渲染)。
-     */
+    /** 镜像入口方法名(null = 固定页模式) */
     val mirrorMethodName: String? = "setTabs",
 
-    /** 显示层过滤顺序(仅展示这些分组; null = 全部镜像显示) */
+    /** 显示层过滤顺序(null = 镜像全部) */
     val displayOrder: List<Int>? = null,
 
-    /** 分组 → 固定标题 */
+    /** 分组 → 标题 */
     val titleByGroup: Map<Int, String> = emptyMap(),
 
-    /** 条目 group 字段/方法读取器(镜像模式下用) */
     val groupReader: ((Any) -> Int?)? = null,
-
-    /** 条目标题读取器(镜像模式下优先, 失败回退 titleByGroup/页面N) */
     val titleReader: ((Any) -> String?)? = null,
 
-    /** 是否在安装后对底栏做快照裁剪(原生位图优先显示) */
+    /** 点击注入方式 */
+    val dispatchMode: DispatchMode = DispatchMode.BAR_CHILDREN,
+
+    /** 安装后快照裁剪(T1 原生位图) */
     val useSnapshot: Boolean = false,
 
-    /** 固定页文案(无镜像入口时直接渲染) */
-    val fixedTabsInOrder: List<String>? = null,
-
-    /** 实验性配置: 默认跳过安装(锚点未经验证), 打开调试开关后才生效 */
+    /** 实验性配置默认跳过 */
     val experimental: Boolean = false,
-) {
-    fun classify(container: ViewGroup): Triple<ViewGroup?, View?, List<View>> {
-        var content: ViewGroup? = null
-        var tab: View? = null
-        val extras = mutableListOf<View>()
-        tabViewClass?.let { tcls ->
-            for (i in 0 until container.childCount) {
-                val c = container.getChildAt(i)
-                if (c.javaClass.name == tcls) { tab = c; break }
-            }
-        }
-        for (i in 0 until container.childCount) {
-            val c = container.getChildAt(i)
-            when {
-                c === tab -> Unit
-                c is ViewGroup && c !is ComposeView && content == null &&
-                    c.javaClass.name == "android.widget.FrameLayout" -> content = c
-                placeholderSuffix != null && c.javaClass.name.endsWith(placeholderSuffix) -> extras += c
-                c.javaClass == View::class.java -> extras += c
-            }
-        }
-        return Triple(content, tab, extras)
-    }
 
+    /** 无镜像入口时的固定页文案 */
+    val fixedTabsInOrder: List<String>? = null,
+) {
+    companion object {
+        fun isComposeView(v: android.view.View) = v is ComposeView
+    }
 }
