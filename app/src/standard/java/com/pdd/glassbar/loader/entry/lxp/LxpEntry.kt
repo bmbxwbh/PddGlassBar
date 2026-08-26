@@ -1,7 +1,7 @@
 package com.pdd.glassbar.loader.entry.lxp
 
 import androidx.annotation.Keep
-import com.pdd.glassbar.app.AppProfiles
+import com.pdd.glassbar.core.AppProfiles
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam

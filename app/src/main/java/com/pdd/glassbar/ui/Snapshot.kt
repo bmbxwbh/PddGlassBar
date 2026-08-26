@@ -3,6 +3,7 @@ package com.pdd.glassbar.ui
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.view.View
+import androidx.compose.ui.graphics.asImageBitmap
 
 /** T1 通用快照裁剪: 整条底栏 → 按槽位等分裁成原生位图。 */
 object Snapshot {

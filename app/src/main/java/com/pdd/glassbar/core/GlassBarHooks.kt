@@ -94,7 +94,7 @@ object GlassBarHooks {
         profile.placeholderSuffix?.let { suffix ->
             runCatching {
                 val phCls = cl.loadClass(
-                    profile.tabViewClass.substringBeforeLast('.') + "." + suffix
+                    profile.tabViewClass!!.substringBeforeLast('.') + "." + suffix
                 )
                 phCls.declaredMethods.firstOrNull { it.name == "onAttachedToWindow" }?.let { m ->
                     m.isAccessible = true

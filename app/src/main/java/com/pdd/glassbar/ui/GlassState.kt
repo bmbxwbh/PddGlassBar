@@ -91,6 +91,9 @@ object BarState {
     private var dotMethod: Method? = null
     private val rawTabs = ArrayList<Any>()
 
+    private fun readGroup(item: Any): Int =
+        runCatching { (groupField?.get(item) as? Number)?.toInt() }.getOrNull() ?: -1
+
     private fun ensureProbe(item: Any) {
         if (probedClass != null) return
         probedClass = item.javaClass
