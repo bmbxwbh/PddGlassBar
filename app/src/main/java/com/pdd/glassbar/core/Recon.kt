@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
 import com.pdd.glassbar.loader.HookBridge
+import com.pdd.glassbar.ui.ModuleFileLogCompat
 import java.lang.ref.WeakReference
 
 /**
@@ -32,7 +33,7 @@ object Recon {
                 ModuleFileLogCompat.write("RECON activity-created " + act.javaClass.name)
                 scheduleDump(act)
             }
-            ReconLog.tagOk("recon armed")
+            b.log("recon armed")
         }.onFailure { t -> b.log("recon FAILED"); b.log(t) }
     }
 

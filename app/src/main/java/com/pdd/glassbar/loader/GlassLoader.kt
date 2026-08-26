@@ -43,6 +43,9 @@ object GlassLoader {
     lateinit var bridge: HookBridge
         private set
 
+    @Volatile
+    private var reconInstalled = false
+
     val installed: Boolean get() = this::bridge.isInitialized
 
     /** 由各入口在目标包内调用; 按 Profile 路由, 幂等。 */
@@ -66,7 +69,8 @@ object GlassLoader {
     }
 
     fun bootstrapRecon(pkg: String, b: HookBridge) {
-        synchronized(this) { if (installed) return; installed = true }
+        synchronized(this) { if (reconInstalled) return
+            reconInstalled = true }
         b.log("recon-mode for " + pkg)
         com.pdd.glassbar.core.Recon.install(b)
     }
