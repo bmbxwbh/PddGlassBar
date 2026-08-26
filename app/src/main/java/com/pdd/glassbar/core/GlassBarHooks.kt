@@ -2,7 +2,6 @@ package com.pdd.glassbar.core
 
 import android.view.View
 import android.view.ViewGroup
-import com.pdd.glassbar.core.AppProfile.AnchorMode
 import com.pdd.glassbar.loader.HookBridge
 import com.pdd.glassbar.ui.BarState
 import com.pdd.glassbar.ui.GlassOverlay
@@ -15,6 +14,7 @@ object GlassBarHooks {
     fun install(b: HookBridge, profile: AppProfile) {
         BarState.configure(profile)
         val cl = b.hostClassLoader
+        val tabCls = profile.tabViewClass?.let { cl.loadClass(it) }
         var hookIdx = 0
         fun ok() { hookIdx++; b.log("hook/$hookIdx ok") }
         fun fail(name: String, t: Throwable) { b.log("hook/$name FAILED"); b.log(t) }
@@ -22,11 +22,7 @@ object GlassBarHooks {
         // ---- 镜像入口(只读) ----
         profile.mirrorMethodName?.let { mName ->
             runCatching {
-                val tabCls = cl.loadClass(
-                    profile.containerClass.substringBeforeLast('.') + ".tab." +
-                        profile.tabViewClass!!.substringAfterLast('.')
-                )
-                val m = tabCls.methods.first { it.name == mName }
+                val m = tabCls!!.methods.first { it.name == mName }
                 b.hookAfter(m) { f ->
                     @Suppress("UNCHECKED_CAST")
                     BarState.mirrorFrom(f.args.getOrNull(0) as? List<Any?>)
@@ -45,7 +41,7 @@ object GlassBarHooks {
                     val container = f.thisObject as? ViewGroup ?: return@hookAfter
                     container.post {
                         runCatching {
-                            com.pdd.glassbar.ui.GlassOverlay.install(
+                            GlassOverlay.install(
                                 container, profile, container.context.findActivity()
                             )
                         }.onFailure { b.log(it) }
@@ -53,15 +49,14 @@ object GlassBarHooks {
                 }
                 ok()
 
-                // 绘制期压制(透明化兜底)
-                val tabCls = cl.loadClass(profile.tabViewClass!!)
-                tabCls.declaredMethods.firstOrNull { it.name == "drawCanvas" }?.let { dm ->
+                val tvCls = cl.loadClass(profile.tabViewClass!!)
+                tvCls.declaredMethods.firstOrNull { it.name == "drawCanvas" }?.let { dm ->
                     dm.isAccessible = true
                     b.hookAfter(dm) { f ->
                         val v = f.thisObject as? View ?: return@hookAfter
                         val p = v.parent as? ViewGroup ?: return@hookAfter
-                        if (p.findViewWithTag<View>(com.pdd.glassbar.ui.GlassOverlay.TAG) != null &&
-                            (v.visibility != View.VISIBLE || v.alpha != 0f)
+                        if (p.findViewWithTag<View>(GlassOverlay.TAG) != null &&
+                            (v.visibility != android.view.View.VISIBLE || v.alpha != 0f)
                         ) BarState.registerHidden(v)
                     }
                 }
@@ -75,25 +70,23 @@ object GlassBarHooks {
                     val act = f.thisObject as? android.app.Activity ?: return@hookAfter
                     if (act.javaClass.name != profile.mainActivityClass) return@hookAfter
                     act.window?.decorView?.postDelayed({
-                        runCatching {
-                            com.pdd.glassbar.ui.GlassOverlay.installByScan(act, profile)
-                        }.onFailure { b.log(it) }
+                        runCatching { GlassOverlay.installByScan(act, profile) }
+                            .onFailure { b.log(it) }
                     }, 800)
                 }
                 ok()
 
-                // 家族成员挂载守卫(独立 View 模式下新实例出现即透明化)
-                val phSuffix = profile.placeholderSuffix
+                // 家族成员挂载守卫
                 val suffixes = profile.tabViewSimpleNameSuffixes
-                cl.loadClass("android.app.Activity").methods.firstOrNull {
-                    it.name == "onAttachedToWindow"
-                }?.let { base ->
+                val phSuffix = profile.placeholderSuffix
+                actCls.getDeclaredMethod("onAttachedToWindow").let { base ->
+                    base.isAccessible = true
                     b.hookAfter(base) { f ->
                         val v = f.thisObject as? View ?: return@hookAfter
                         val sn = v.javaClass.simpleName
-                        val hit = suffixes.any { sn.endsWith(it) } ||
+                        if (suffixes.any { sn.endsWith(it) } ||
                             (phSuffix != null && sn.endsWith(phSuffix))
-                        if (hit) BarState.registerHidden(v)
+                        ) BarState.registerHidden(v)
                     }
                 }
             }.onFailure { fail("resume-scan", it) }
