@@ -37,6 +37,8 @@ import com.pdd.glassbar.ui.content.FloatingBottomBarMode
 import com.pdd.glassbar.ui.content.rememberViewBackdrop
 
 private val PDD_RED = Color(0xFFE02E24)
+private val LIGHT_UNSELECTED = Color(0xFF000000)   // 浅色: 纯黑
+private val DARK_UNSELECTED = Color(0xFFF2F2F2)    // 深色: 白带点灰
 private val DARK_BG = Color(0xFF191919)
 private val LIGHT_BG = Color(0xFFF7F7F7)
 
@@ -73,7 +75,7 @@ fun GlassBarHost(sourceView: View) {
                 colors = FloatingBottomBarDefaults.colors(
                     containerColor = if (dark) DARK_BG else LIGHT_BG,
                     indicatorColor = PDD_RED,
-                    contentColor = Color(0xFF666666),
+                    contentColor = if (dark) DARK_UNSELECTED else LIGHT_UNSELECTED,
                     activeContentColor = PDD_RED,
                 ),
                 liquidGlassBlurRadius = 18.dp,
