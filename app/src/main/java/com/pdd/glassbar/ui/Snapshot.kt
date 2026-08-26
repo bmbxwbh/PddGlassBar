@@ -20,7 +20,7 @@ object Snapshot {
             repeat(slots) { i ->
                 if (i * w + w <= src.width) {
                     val crop = Bitmap.createBitmap(src, i * w, 0, w, bar.height)
-                    BarState.putNativeIcon(i, androidx.compose.ui.graphics.asImageBitmap(crop))
+                    BarState.putNativeIcon(i, crop.asImageBitmap())
                 }
             }
             src.recycle()
