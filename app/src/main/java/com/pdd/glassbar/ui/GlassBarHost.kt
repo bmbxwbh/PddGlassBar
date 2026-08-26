@@ -28,7 +28,6 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalView
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import androidx.compose.ui.platform.LocalView
 import com.pdd.glassbar.ui.content.FloatingBottomBar
 import com.pdd.glassbar.ui.content.FloatingBottomBarDefaults
 import com.pdd.glassbar.ui.content.FloatingBottomBarMode
