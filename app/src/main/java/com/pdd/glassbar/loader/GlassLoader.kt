@@ -1,13 +1,10 @@
 package com.pdd.glassbar.loader
 
-import com.pdd.glassbar.core.GlassBarHooks
+import com.pdd.glassbar.core.AppProfile
 import java.lang.reflect.Member
 
-/**
- * 单帧 hook 上下文。语义与 de.robv / libxposed 两套 API 对齐后收敛的最小公共面:
- * - before 阶段: 改写 [args]; 置 [skipOriginal]=true 并给 [result] 可跳过原方法
- * - after 阶段: [originalResult] 为原方法返回值; 给 [result] 赋非 [UNCHANGED] 值可改写返回值
- */
+// ==================== 帧与桥接口 ====================
+
 class HookFrame(
     val member: Member?,
     val thisObject: Any?,
@@ -34,8 +31,13 @@ interface HookBridge {
     fun log(t: Throwable) = log(t.stackTraceToString())
 }
 
-object PddLoader {
-    const val TARGET_PACKAGE = "com.xunmeng.pinduoduo"
+// ==================== 路由加载器 ====================
+
+object GlassLoader {
+
+    @Volatile
+    lateinit var profile: AppProfile
+        private set
 
     @Volatile
     lateinit var bridge: HookBridge
@@ -43,18 +45,25 @@ object PddLoader {
 
     val installed: Boolean get() = this::bridge.isInitialized
 
-    /** 由两种入口(libxposed / legacy)在目标进程内调用, 幂等。 */
-    fun bootstrap(b: HookBridge) {
+    /** 由各入口在目标包内调用; 按 Profile 路由, 幂等。 */
+    fun bootstrap(profile: AppProfile, b: HookBridge) {
         synchronized(this) {
             if (installed) return
-            bridge = b
+            this.profile = profile
+            this.bridge = b
         }
         try {
-            GlassBarHooks.install(b)
-            val proc = runCatching { android.app.Application.getProcessName() }.getOrNull() ?: "?"
-            b.log("hooks installed (process=$proc)")
+            if (profile.experimental) {
+                b.log("experimental profile skipped: " + profile.packageName)
+                return
+            }
+            com.pdd.glassbar.core.GlassBarHooks.install(b, profile)
+            b.log("GlassBar hooks installed (" + profile.label + ")")
         } catch (t: Throwable) {
             b.log(t)
         }
     }
+
+    fun bootstrapPdd(b: HookBridge) =
+        bootstrap(com.pdd.glassbar.core.AppProfiles.forPackage("com.xunmeng.pinduoduo")!!, b)
 }

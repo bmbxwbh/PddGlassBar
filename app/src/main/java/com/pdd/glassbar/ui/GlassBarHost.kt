@@ -94,11 +94,20 @@ fun GlassBarHost(sourceView: View) {
                             animationSpec = tween(200),
                             label = "pddTabIcon",
                         ) { sel ->
-                            Icon(
-                                imageVector = PddIcons.icon(item.group, sel),
-                                contentDescription = item.title,
-                                modifier = Modifier.size(26.dp),
-                            )
+                            val nativeBmp = BarState.nativeIcon(index)
+                            when {
+                                nativeBmp != null -> Image(
+                                    bitmap = nativeBmp,
+                                    contentDescription = item.title,
+                                    modifier = Modifier.size(26.dp),
+                                    contentScale = ContentScale.Fit,
+                                )
+                                else -> Icon(
+                                    imageVector = PddIcons.icon(item.group, sel),
+                                    contentDescription = item.title,
+                                    modifier = Modifier.size(26.dp),
+                                )
+                            }
                         }
                     }
                 },

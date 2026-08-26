@@ -1,22 +1,29 @@
 package com.pdd.glassbar.loader.entry.lxp
 
 import androidx.annotation.Keep
-import com.pdd.glassbar.loader.PddLoader
+import com.pdd.glassbar.app.AppProfiles
 import io.github.libxposed.api.XposedModule
 import io.github.libxposed.api.XposedModuleInterface.ModuleLoadedParam
 import io.github.libxposed.api.XposedModuleInterface.PackageReadyParam
 
-/** libxposed 现代入口 (META-INF/xposed/java_init.list 指向本类)。 */
 @Keep
 class LxpEntry : XposedModule() {
 
-    override fun onModuleLoaded(param: ModuleLoadedParam) {
-        // 框架就绪, 无需额外初始化
-    }
+    override fun onModuleLoaded(param: ModuleLoadedParam) {}
 
     override fun onPackageReady(param: PackageReadyParam) {
-        if (param.packageName == PddLoader.TARGET_PACKAGE && param.isFirstPackage) {
-            PddLoader.bootstrap(LxpBridge(this, param.classLoader))
-        }
+        val p = AppProfiles.forPackage(param.packageName) ?: return
+        if (!param.isFirstPackage) return
+        GlassLoaderBootstrap.bootstrap(this, param, p)
+    }
+}
+
+/** 拆出以避免入口类直接依赖桥细节 */
+private object GlassLoaderBootstrap {
+    fun bootstrap(m: XposedModule, param: PackageReadyParam, p: com.pdd.glassbar.core.AppProfile) {
+        com.pdd.glassbar.loader.GlassLoader.bootstrap(
+            p,
+            LxpBridge(m, param.classLoader)
+        )
     }
 }

@@ -7,20 +7,19 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.setValue
-import com.pdd.glassbar.loader.PddLoader
+import com.pdd.glassbar.core.AppProfile
+import com.pdd.glassbar.loader.GlassLoader
 import java.lang.ref.WeakReference
 import java.lang.reflect.Field
 import java.lang.reflect.Method
+import java.util.concurrent.ConcurrentHashMap
 
 /**
- * 纯镜像架构状态中枢: 不修改 PDD 行为, 只观察/透明化/合成触摸。
+ * 纯镜像状态中枢。全部行为由 [AppProfile] 配置驱动。
  */
 object BarState {
 
     data class TabUi(val title: String, val group: Int, val nativeIndex: Int)
-
-    val GROUP_ORDER = listOf(0, 14, 3, 4)
-    val FIXED_TITLES = mapOf(0 to "首页", 14 to "视频", 3 to "聊天", 4 to "个人")
 
     val tabs = mutableStateListOf<TabUi>()
     val dots = mutableStateListOf<Boolean>()
@@ -30,15 +29,29 @@ object BarState {
     var dotTick by mutableIntStateOf(0)
         private set
 
-    // ---- 隐藏视图(alpha=0 看门狗名单) ----
-    private val hiddenRefs = java.util.concurrent.CopyOnWriteArrayList<WeakReference<View>>()
+    // ---- Profile 配置(install 时注入) ----
+    private var displayOrder: List<Int>? = null
+    private var titleByGroup: Map<Int, String> = emptyMap()
+    private var groupReader: ((Any) -> Int?)? = null
+    private var titleReader: ((Any) -> String?)? = null
+
+    fun configure(p: AppProfile) {
+        displayOrder = p.displayOrder
+        titleByGroup = p.titleByGroup
+        groupReader = p.groupReader
+        titleReader = p.titleReader
+    }
+
+    // ---- 隐藏视图(alpha=0 看门狗名单; 不用 GONE —— 保布局供合成触摸) ----
+    private val hiddenRefs = java.util.concurrent.CopyOnWriteArrayList<
+        WeakReference<View>>()
 
     fun registerHidden(v: View) {
         v.alpha = 0f
         hiddenRefs += WeakReference(v)
     }
 
-    /** 周期性再透明化。 */
+    /** 周期性再透明化(PDD 的可见性翻转碰不到 alpha)。 */
     fun reassertHidden() {
         hiddenRefs.removeAll { it.get() == null }
         hiddenRefs.forEach { runCatching { it.get()?.alpha = 0f } }
@@ -51,7 +64,7 @@ object BarState {
         tabViewRef = WeakReference(v)
     }
 
-    // ---- 控制器(仅读取 i 同步选中态) ----
+    // ---- 控制器(仅读 i 同步选中态) ----
     private var controllerRef: Any? = null
     private var controllerIField: Field? = null
 
@@ -60,11 +73,23 @@ object BarState {
         controllerIField = runCatching { controller.javaClass.getField("i") }.getOrNull()
     }
 
+    // ---- 原生位图(快照裁剪) ----
+    private val nativeByIndex = ConcurrentHashMap<Int, androidx.compose.ui.graphics.ImageBitmap>()
+
+    fun putNativeIcon(index: Int, bmp: androidx.compose.ui.graphics.ImageBitmap) {
+        nativeByIndex[index] = bmp
+        dotTick++
+    }
+
+    fun nativeIcon(index: Int): androidx.compose.ui.graphics.ImageBitmap? =
+        nativeByIndex[index]
+
     // ---- 实体探测缓存 ----
     private var probedClass: Class<*>? = null
     private var groupField: Field? = null
     private var titleField: Field? = null
     private var dotMethod: Method? = null
+    private val rawTabs = ArrayList<Any>()
 
     private fun ensureProbe(item: Any) {
         if (probedClass != null) return
@@ -72,7 +97,7 @@ object BarState {
         groupField = runCatching { item.javaClass.getField("group") }.getOrNull()
         titleField = runCatching { item.javaClass.getField("title") }.getOrNull()
         dotMethod = runCatching { item.javaClass.getMethod("showRedDot") }.getOrNull()
-        PddLoader.bridge.log(
+        GlassLoader.bridge.log(
             "probe cls=" + item.javaClass.name +
                 " group=" + (groupField != null) +
                 " title=" + (titleField != null) +
@@ -80,47 +105,53 @@ object BarState {
         )
     }
 
-    private fun readGroup(item: Any): Int =
-        runCatching { (groupField?.get(item) as? Number)?.toInt() }.getOrNull() ?: -1
-
-    // ---- 只读镜像 ----
+    /**
+     * 只读镜像: 同步玻璃栏展示与原生列表(含显示层过滤), 索引即原生索引。
+     */
     fun mirrorFrom(rawList: List<Any?>?) {
         if (rawList.isNullOrEmpty()) return
         val nonNull = rawList.filterNotNull()
-        ensureProbe(nonNull.first())
-
         synchronized(rawTabs) {
-            rawTabs.clear()
-            rawTabs.addAll(nonNull)
+            rawTabs.clear(); rawTabs.addAll(nonNull)
         }
+        ensureProbe(nonNull.first())
 
         val out = mutableListOf<TabUi>()
         val dts = mutableListOf<Boolean>()
         nonNull.forEachIndexed { idx, t ->
             val g = readGroup(t)
-            val fallbackTitle = "页面" + (idx + 1)
+            val fallback = "页面" + (idx + 1)
             val title = when {
-                FIXED_TITLES.containsKey(g) -> FIXED_TITLES[g]!!
+                g in titleByGroup -> titleByGroup[g]!!
                 else -> runCatching {
                     (titleField?.get(t) as? String)?.takeIf { it.isNotBlank() }
-                }.getOrNull() ?: fallbackTitle
+                }.getOrNull() ?: fallback
             }
             out += TabUi(title, g, idx)
             dts += runCatching { dotMethod?.invoke(t) as? Boolean == true }.getOrDefault(false)
         }
 
-        // 显示层过滤: 能识别出固定页则只展示固定四页(原生索引保留用于触摸映射)
-        val fixedOnly = out.filter { it.group in GROUP_ORDER }
-            .sortedBy { GROUP_ORDER.indexOf(it.group) }
-        val display = if (fixedOnly.isNotEmpty()) fixedOnly else out
+        val display = displayOrder?.let { order ->
+            out.filter { it.group in order }.sortedBy { order.indexOf(it.group) }
+                .takeIf { it.isNotEmpty() }
+        } ?: out
 
         if (display != tabs.toList()) {
             tabs.clear(); tabs.addAll(display)
         }
         if (dts != dots.toList()) {
-            dots.clear(); dots.addAll(dts); dotTick++
+            dots.clear(); dots.addAll(dts)
         }
         syncSelectedFromHost()
+    }
+
+    /** 固定页模式(无镜像入口的 Profile)。 */
+    fun setFixedTabs(titles: List<String>) {
+        val list = titles.mapIndexed { i, t -> TabUi(t, -1, i) }
+        if (list != tabs.toList()) {
+            tabs.clear(); tabs.addAll(list)
+        }
+        if (selected >= tabs.size) selected = 0
     }
 
     private fun syncSelectedFromHost() {
@@ -137,7 +168,7 @@ object BarState {
         if (displayIdx in tabs.indices) selected = displayIdx
     }
 
-    // ---- 点击路由: 向原 PddTabView 对应子视图注入真实触摸 ----
+    // ---- 点击路由: 向原生子视图注入真实触摸 ----
     fun requestSelect(displayIdx: Int) {
         markSelected(displayIdx)
         val tv = tabViewRef?.get() as? ViewGroup ?: return
@@ -155,13 +186,11 @@ object BarState {
             tv.dispatchTouchEvent(
                 MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, x, y, 0)
             )
-            val up = now + 60
+            val upAt = now + 60
             tv.dispatchTouchEvent(
-                MotionEvent.obtain(up, up, MotionEvent.ACTION_UP, x, y, 0)
+                MotionEvent.obtain(upAt, upAt, MotionEvent.ACTION_UP, x, y, 0)
             )
-            PddLoader.bridge.log("tap->native idx=$nativeIdx")
-        }.onFailure { PddLoader.bridge.log(it) }
+            GlassLoader.bridge.log("tap->native idx=$nativeIdx")
+        }.onFailure { GlassLoader.bridge.log(it) }
     }
-
-    private val rawTabs = ArrayList<Any>()
 }

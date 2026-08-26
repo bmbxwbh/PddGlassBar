@@ -1,7 +1,7 @@
 package com.pdd.glassbar.ui
 
 import android.content.Context
-import com.pdd.glassbar.loader.PddLoader
+import com.pdd.glassbar.loader.GlassLoader
 import com.pdd.glassbar.ui.ModuleFileLog
 import java.io.File
 import java.io.PrintWriter
@@ -24,7 +24,7 @@ object CrashCapture {
                 val text = "thread=${t.name}\ne=${e.javaClass.name}: ${e.message}\n\n$sw"
                 runCatching { File(context.filesDir, "pddglassbar-crash.log").writeText(text) }
                 runCatching { File("/sdcard/pddglassbar-crash.log").writeText(text) }
-                runCatching { PddLoader.bridge.log("UNCAUGHT ${e.javaClass.name}: ${e.message}") }
+                runCatching { GlassLoader.bridge.log("UNCAUGHT ${e.javaClass.name}: ${e.message}") }
                 runCatching { ModuleFileLog.write(text) }
             }
             prev?.uncaughtException(t, e)

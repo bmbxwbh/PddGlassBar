@@ -18,8 +18,8 @@ android {
         applicationId = libs.versions.namespace.get()
         minSdk = libs.versions.minSdk.get().toInt()
         targetSdk = libs.versions.targetSdk.get().toInt()
-        versionCode = 9
-        versionName = "1.4.2"
+        versionCode = 10
+        versionName = "1.5.0"
     }
 
     // 与 WeKit 相同的双入口布局:
