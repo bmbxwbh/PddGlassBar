@@ -1,9 +1,22 @@
 package com.pdd.glassbar.ui
 
 import android.app.Activity
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.RelativeLayout
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.ComposeView
 import androidx.lifecycle.ViewModelStoreOwner
 import androidx.lifecycle.setViewTreeLifecycleOwner
@@ -11,10 +24,6 @@ import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.pdd.glassbar.core.AppProfile
-import com.pdd.glassbar.hooks.BiliGlassContent
-import com.pdd.glassbar.loader.GlassLoader
-import com.pdd.glassbar.ui.utils.LifecycleOwnerProvider
-import com.pdd.glassbar.ui.utils.setLifecycleOwner
 import java.io.File
 
 object GlassOverlay {
@@ -31,7 +40,6 @@ object GlassOverlay {
         if (!checkFlag()) return
         if (container.findViewWithTag<View>(TAG) != null) return
         ModuleFileLog.init(container.context)
-        runCatching { CrashCapture.install(activity ?: container.context) }
 
         var content: ViewGroup? = null
         var tabView: View? = null
@@ -51,17 +59,17 @@ object GlassOverlay {
         }
         val sv = content ?: return
         log("classified hide=${targets.size}")
-        doActivate(container, profile, activity, sv, tabView, targets)
+        doActivate(attachTo = container, sourceView = sv, tabView = tabView,
+                   extras = targets, activity = activity)
     }
 
-    fun installByScan(activity: Activity) {
+    fun installByScan(activity: Activity, profile: AppProfile) {
         if (!checkFlag()) return
         ModuleFileLog.init(activity)
-        runCatching { CrashCapture.install(activity) }
         val root = activity.window?.decorView as? ViewGroup ?: return
 
         var barView: ViewGroup? = null
-        walk(root, 0) { v, _ ->
+        findBottomStrip(root, 0) { v ->
             if (barView == null && v is ViewGroup && v.visibility == View.VISIBLE &&
                 v.width >= root.width * 9 / 10 &&
                 v.height > 0 && v.height < root.height / 8
@@ -69,16 +77,13 @@ object GlassOverlay {
         }
         val bar = barView ?: run { log("scan-no-bar"); return }
         log("scan-found cls=" + bar.javaClass.simpleName + " h=" + bar.height)
-
-        // alpha=0 隐藏原栏(保留布局供合成触摸)
         bar.alpha = 0f
 
-        // 创建玻璃栏 ComposeView(mode=None 因为无内容采样源)
         val owner = com.pdd.glassbar.ui.utils.LifecycleOwnerProvider.getOrCreate(activity)
-        val cv = androidx.compose.ui.platform.ComposeView(activity).apply {
+        val cv = ComposeView(activity).apply {
             tag = TAG; clipChildren = false; clipToPadding = false
             setLifecycleOwner(owner)
-            setContent { BiliGlassContent() }
+            setContent { BiliTabContent() }
         }
         log("compose-created")
 
@@ -86,64 +91,26 @@ object GlassOverlay {
             ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT
         ).apply { addRule(RelativeLayout.ALIGN_PARENT_BOTTOM) }
-        root.addView(cv, lp)
+        (root as ViewGroup).addView(cv, lp)
         log("attached")
     }
 
-    private fun doActivate(
-        attachTo: ViewGroup,
-        profile: AppProfile,
-        activity: Activity?,
-        sourceView: ViewGroup?,
-        tabView: View?,
-        toTransparent: List<View>
-    ) {
-        var composeView: ComposeView? = null
-        try {
-            val ourOwner = activity?.let { LifecycleOwnerProvider.getOrCreate(it) }
-                ?: LifecycleOwnerProvider.lifecycleOwner
-            val decor = activity?.window?.decorView ?: attachTo.rootView
-            decor.setViewTreeLifecycleOwner(ourOwner)
-            (ourOwner as? ViewModelStoreOwner)?.let {
-                decor.setViewTreeViewModelStoreOwner(it)
-            }
-            (ourOwner as? SavedStateRegistryOwner)?.let {
-                decor.setViewTreeSavedStateRegistryOwner(it)
-            }
+    @Composable
+    private fun BiliTabContent() {
+        val dark = androidx.compose.foundation.isSystemInDarkTheme()
+        val bg = if (dark) Color(0xF01A1A1A) else Color(0xF0F5F5F5)
+        val txtColor = if (dark) Color(0xFFEDEDED) else Color.Black
 
-            composeView = ComposeView(attachTo.context).apply {
-                tag = TAG
-                clipChildren = false
-                clipToPadding = false
-                setLifecycleOwner(ourOwner)
-                setContent { GlassBarHost(sourceView = sourceView) }
-            }
-            log("compose-created")
-
-            toTransparent.forEach { v ->
-                v.alpha = 0f
-                v.visibility = View.INVISIBLE
-            }
-            attachTo.clipChildren = false
-            attachTo.clipToPadding = false
-            sourceView?.clipChildren = false
-
-            val lp = RelativeLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { addRule(RelativeLayout.ALIGN_PARENT_BOTTOM) }
-            attachTo.addView(composeView, lp)
-            log("attached")
-        } catch (t: Throwable) {
-            runCatching {
-                toTransparent.forEach { v ->
-                    v.alpha = 1f; v.visibility = View.VISIBLE
+        Box(Modifier.fillMaxWidth().height(65.dp).background(bg)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                listOf("首页", "动态", "发布", "会员购", "我的").forEach { title ->
+                    Text(title, fontSize = 12.sp, color = txtColor)
                 }
-                composeView?.let { attachTo.removeView(it) }
-                attachTo.clipChildren = true; attachTo.clipToPadding = true
             }
-            log(t)
-            log("install FAILED -> rolled back")
         }
     }
 
@@ -153,18 +120,13 @@ object GlassOverlay {
         return v == "on" || v == "noglass" || v == "noicons"
     }
 
-    private fun walk(v: View, depth: Int, visit: (View, Int) -> Unit) {
-        visit(v, depth)
+    private fun findBottomStrip(v: View, depth: Int, visit: (View) -> Unit) {
+        if (depth > 14 || !v.isShown) return
+        visit(v)
         if (v is ViewGroup) {
-            for (i in 0 until v.childCount) walk(v.getChildAt(i), depth + 1, visit)
+            for (i in 0 until v.childCount) {
+                findBottomStrip(v.getChildAt(i), depth + 1, visit)
+            }
         }
-    }
-
-    private fun log(msg: String) {
-        runCatching { GlassLoader.bridge.log("install/" + msg) }
-    }
-
-    private fun log(t: Throwable) {
-        runCatching { GlassLoader.bridge.log(t.stackTraceToString()) }
     }
 }
