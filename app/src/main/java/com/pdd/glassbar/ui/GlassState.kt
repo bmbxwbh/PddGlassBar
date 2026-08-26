@@ -34,6 +34,7 @@ object BarState {
     private var titleByGroup: Map<Int, String> = emptyMap()
     private var groupReader: ((Any) -> Int?)? = null
     private var titleReader: ((Any) -> String?)? = null
+    internal var slotsForSnapshot: Int = 0
 
     fun configure(p: AppProfile) {
         displayOrder = p.displayOrder
