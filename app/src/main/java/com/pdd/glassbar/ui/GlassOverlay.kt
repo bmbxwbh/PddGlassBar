@@ -5,16 +5,9 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.RelativeLayout
 import androidx.compose.ui.platform.ComposeView
-import androidx.lifecycle.ViewModelStoreOwner
-import androidx.lifecycle.setViewTreeLifecycleOwner
-import androidx.lifecycle.setViewTreeViewModelStoreOwner
-import androidx.savedstate.SavedStateRegistryOwner
-import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.pdd.glassbar.core.AppProfile
-import com.pdd.glassbar.core.TabMatchMode
 import com.pdd.glassbar.loader.GlassLoader
-import com.pdd.glassbar.ui.utils.LifecycleOwnerProvider
-import com.pdd.glassbar.ui.utils.setLifecycleOwner
+import com.pdd.glassbar.hooks.BiliHooks
 import java.io.File
 
 object GlassOverlay {
@@ -28,11 +21,10 @@ object GlassOverlay {
     )
 
     fun install(container: ViewGroup, profile: AppProfile, activity: Activity?) {
-        if (!checkFlag()) { log("kill-switch/skip"); return }
+        if (!checkFlag()) return
         if (container.findViewWithTag<View>(TAG) != null) return
-        val ctx = activity ?: container.context
-        runCatching { ModuleFileLog.init(ctx) }
-        runCatching { CrashCapture.install(ctx) }
+        ModuleFileLog.init(container.context)
+        runCatching { CrashCapture.install(activity ?: container.context) }
 
         var content: ViewGroup? = null
         var tabView: View? = null
@@ -42,35 +34,55 @@ object GlassOverlay {
             when {
                 c is ViewGroup && c !is ComposeView && content == null &&
                     c.javaClass.name == "android.widget.FrameLayout" -> content = c
-                c.javaClass.name.endsWith("PddTabPlaceholderLayout") -> targets += c
-                c.javaClass.name == profile.tabViewClass -> { tabView = c; targets += c }
+                profile.placeholderSuffix != null &&
+                    c.javaClass.name.endsWith(profile.placeholderSuffix!!) -> targets += c
+                profile.tabViewClass != null && c.javaClass.name == profile.tabViewClass -> {
+                    tabView = c; targets += c
+                }
                 c is View && c.javaClass == View::class.java -> targets += c
             }
         }
+        val sv = content ?: return
         log("classified hide=${targets.size}")
-        doActivate(container, profile, activity, content, tabView, targets)
+        doActivate(attachTo = container, sourceView = sv, tabView = tabView,
+                   extras = targets, activity = activity)
     }
 
     fun installByScan(activity: Activity, profile: AppProfile) {
         if (!checkFlag()) { log("scan kill-switch/skip"); return }
         ModuleFileLog.init(activity)
-        runCatching { CrashCapture.install(activity) }
-        val root = activity.window?.decorView ?: return
+        val root = activity.window?.decorView as? ViewGroup ?: return
+        log("scan screen=${root.width}x${root.height}")
 
-        val tabViews = mutableListOf<View>()
-        walk(root, 0) { v, _ ->
-            if (profile.tabMatchMode == TabMatchMode.SIMPLE_NAME_SUFFIXES &&
-                profile.tabViewSimpleNameSuffixes.any {
-                    v.javaClass.simpleName.endsWith(it)
-                }
-            ) tabViews += v
+        // 位置启发式: 找屏幕底部区域的全宽 ViewGroup 作为底栏
+        var barView: ViewGroup? = null
+        findBottomStrip(root, 0, root.height) { v ->
+            if (barView == null && v is ViewGroup &&
+                v.visibility == View.VISIBLE &&
+                v.width >= root.width * 9 / 10 &&
+                v.height > 0 && v.height < root.height / 8
+            ) barView = v
         }
-        log("scan tabs=${tabViews.size}")
-        if (tabViews.isEmpty()) { log("scan-no-match"); return }
-        tabViews.sortBy { it.x + it.left.toFloat() }
+        val bar = barView ?: run { log("scan-no-bar"); return }
+        log("scan-found cls=" + bar.javaClass.simpleName + " h=" + bar.height)
 
-        doActivate(root as ViewGroup, profile, activity, null,
-                   tabViews.first(), tabViews.toList())
+        // alpha=0 隐藏原栏(保留布局供合成触摸)
+        bar.alpha = 0f
+
+        // 挂载玻璃栏到 DecorView 底部
+        val cv = ComposeView(activity).apply {
+            tag = TAG
+            clipChildren = false; clipToPadding = false
+            setContent { com.pdd.glassbar.hooks.BiliGlassContent() }
+        }
+        log("compose-created")
+
+        val lp = RelativeLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        ).apply { addRule(RelativeLayout.ALIGN_PARENT_BOTTOM) }
+        root.addView(cv, lp)
+        log("attached")
     }
 
     private fun checkFlag(): Boolean {
@@ -79,82 +91,17 @@ object GlassOverlay {
         return v == "on" || v == "noglass" || v == "noicons"
     }
 
-    private fun walk(v: View, depth: Int, visit: (View, Int) -> Unit) {
-        visit(v, depth)
+    private fun findBottomStrip(v: View, depth: Int, scrH: Int, visit: (View) -> Unit) {
+        if (depth > 14 || !v.isShown) return
+        visit(v)
         if (v is ViewGroup) {
-            for (i in 0 until v.childCount) walk(v.getChildAt(i), depth + 1, visit)
-        }
-    }
-
-    private fun doActivate(
-        attachTo: ViewGroup,
-        profile: AppProfile,
-        activity: Activity?,
-        sourceView: ViewGroup?,
-        tabView: View?,
-        toTransparent: List<View>
-    ) {
-        var composeView: ComposeView? = null
-        try {
-            val ourOwner = activity?.let { LifecycleOwnerProvider.getOrCreate(it) }
-                ?: LifecycleOwnerProvider.lifecycleOwner
-            val decor: View = activity?.window?.decorView ?: attachTo.rootView
-            decor.setViewTreeLifecycleOwner(ourOwner)
-            (ourOwner as? ViewModelStoreOwner)?.let {
-                decor.setViewTreeViewModelStoreOwner(it)
-            }
-            (ourOwner as? SavedStateRegistryOwner)?.let {
-                decor.setViewTreeSavedStateRegistryOwner(it)
-            }
-
-            composeView = ComposeView(attachTo.context).apply {
-                tag = TAG
-                clipChildren = false
-                clipToPadding = false
-                setLifecycleOwner(ourOwner)
-                setContent { GlassBarHost(sourceView = sourceView) }
-            }
-            log("compose-created")
-
-            toTransparent.forEach { it.alpha = 0f }
-            attachTo.clipChildren = false
-            attachTo.clipToPadding = false
-            sourceView?.clipChildren = false
-
-            val lp = RelativeLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.WRAP_CONTENT
-            ).apply { addRule(RelativeLayout.ALIGN_PARENT_BOTTOM) }
-            attachTo.addView(composeView, lp)
-            log("attached")
-
-            if (profile.useSnapshot && tabView != null) {
-                tabView.postDelayed({
-                    runCatching {
-                        val slots = BarState.tabs.size.coerceAtLeast(1)
-                        val saved = tabView.alpha
-                        tabView.alpha = 1f
-                        Snapshot.harvest(tabView, slots)
-                        tabView.alpha = saved
-                        log("snapshot slots=" + slots)
-                    }
-                }, 400)
-            }
-        } catch (t: Throwable) {
-            runCatching {
-                toTransparent.forEach { it.alpha = 1f; it.visibility = View.VISIBLE }
-                composeView?.let { attachTo.removeView(it) }
-                attachTo.clipChildren = true
-                attachTo.clipToPadding = true
-            }
-            runCatching {
-                GlassLoader.bridge.log(t)
-                GlassLoader.bridge.log("install FAILED -> rolled back")
+            for (i in 0 until v.childCount) {
+                findBottomStrip(v.getChildAt(i), depth + 1, scrH, visit)
             }
         }
     }
 
-    private fun log(stage: String) {
-        runCatching { GlassLoader.bridge.log("install/" + stage) }
+    private fun log(msg: String) {
+        runCatching { GlassLoader.bridge.log("install/$msg") }
     }
 }

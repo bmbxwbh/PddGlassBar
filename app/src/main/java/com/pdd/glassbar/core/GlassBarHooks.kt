@@ -1,93 +1,92 @@
 package com.pdd.glassbar.core
 
+import android.app.Activity
 import android.view.View
 import android.view.ViewGroup
-import com.pdd.glassbar.core.AnchorMode
 import com.pdd.glassbar.loader.HookBridge
-import com.pdd.glassbar.ui.BarState
-import com.pdd.glassbar.ui.GlassOverlay
-import com.pdd.glassbar.ui.Snapshot
-import com.pdd.glassbar.ui.utils.findActivity
 
 object GlassBarHooks {
 
     fun install(b: HookBridge, profile: AppProfile) {
-        BarState.configure(profile)
         val cl = b.hostClassLoader
-        val tabCls = profile.tabViewClass?.let { cl.loadClass(it) }
-        var hookIdx = 0
-        fun ok() { hookIdx++; b.log("hook/$hookIdx ok") }
-        fun fail(name: String, t: Throwable) { b.log("hook/$name FAILED"); b.log(t) }
+        var idx = 0
+        fun ok() { idx++; b.log("hook/$idx ok") }
+        fun fail(n: String, t: Throwable) { b.log("hook/$n FAILED"); b.log(t) }
 
-        profile.mirrorMethodName?.let { mName ->
-            runCatching {
-                val m = tabCls!!.methods.first { it.name == mName }
-                b.hookAfter(m) { f ->
-                    @Suppress("UNCHECKED_CAST")
-                    BarState.mirrorFrom(f.args.getOrNull(0) as? List<Any?>)
-                }
-                ok()
-            }.onFailure { fail("mirror/$mName", it) }
-        }
+        when (profile.packageName) {
 
-        when (profile.anchorMode) {
-
-            AnchorMode.CONTAINER_INITVIEW -> runCatching {
-                val containerCls = cl.loadClass(profile.containerClass)
-                val m = containerCls.getDeclaredMethod("initView")
-                m.isAccessible = true
-                b.hookAfter(m) { f ->
-                    val container = f.thisObject as? ViewGroup ?: return@hookAfter
-                    container.post {
-                        runCatching {
-                            GlassOverlay.install(
-                                container, profile, container.context.findActivity()
-                            )
-                        }.onFailure { b.log(it) }
+            // ═══════════ 拼多多 ═══════════
+            "com.xunmeng.pinduoduo" -> {
+                runCatching {
+                    val tabCls = cl.loadClass(
+                        "com.xunmeng.pinduoduo.ui_home_activity.widget.tab.PddTabView"
+                    )
+                    // 镜像
+                    val setTabs = tabCls.methods.first { it.name == "setTabs" }
+                    b.hookAfter(setTabs) { f ->
+                        @Suppress("UNCHECKED_CAST")
+                        BarState.mirrorFrom(f.args.getOrNull(0) as? List<Any?>)
                     }
-                }
-                ok()
+                    ok()
+                }.onFailure { fail("pdd-mirror", it) }
 
-                val tvCls = cl.loadClass(profile.tabViewClass!!)
-                tvCls.declaredMethods.firstOrNull { it.name == "drawCanvas" }?.let { dm ->
-                    dm.isAccessible = true
-                    b.hookAfter(dm) { f ->
-                        val v = f.thisObject as? View ?: return@hookAfter
-                        val p = v.parent as? ViewGroup ?: return@hookAfter
-                        if (p.findViewWithTag<View>(GlassOverlay.TAG) != null &&
-                            (v.visibility != android.view.View.VISIBLE || v.alpha != 0f)
-                        ) BarState.registerHidden(v)
+                runCatching {
+                    val containerCls = cl.loadClass(
+                        "com.xunmeng.pinduoduo.ui_home_activity.widget.MainFrameContainerView"
+                    )
+                    val initM = containerCls.getDeclaredMethod("initView")
+                    initM.isAccessible = true
+                    b.hookAfter(initM) { f ->
+                        val c = f.thisObject as? ViewGroup ?: return@hookAfter
+                        c.post { runCatching {
+                            com.pdd.glassbar.ui.GlassOverlay.install(c,
+                                cl.loadClass("com.xunmeng.pinduoduo.ui_home_activity.widget.tab.PddTabView"),
+                                c.context.findActivity())
+                        }.onFailure { b.log(it) } }
                     }
-                }
-            }.onFailure { fail("container-anchor", it) }
+                    ok()
+                }.onFailure { fail("pdd-overlay", it) }
 
-            AnchorMode.ACTIVITY_RESUME_SCAN -> runCatching {
-                val actCls = cl.loadClass("android.app.Activity")
-                val m = actCls.getDeclaredMethod("onResume")
-                m.isAccessible = true
-                b.hookAfter(m) { f ->
-                    val act = f.thisObject as? android.app.Activity ?: return@hookAfter
-                    if (act.javaClass.name != profile.mainActivityClass) return@hookAfter
-                    act.window?.decorView?.postDelayed({
-                        runCatching { GlassOverlay.installByScan(act, profile) }
-                            .onFailure { b.log(it) }
-                    }, 800)
-                }
-                ok()
+                runCatching {
+                    val tabCls2 = cl.loadClass(
+                        "com.xunmeng.pinduoduo.ui_home_activity.widget.tab.PddTabView"
+                    )
+                    val dc = tabCls2.declaredMethods.first { it.name == "drawCanvas" }
+                    dc.isAccessible = true
+                    b.hookAfter(dc) { f -> BarState.reassertHidden() }
+                    ok()
+                }.onFailure { fail("pdd-suppress", it) }
 
-                val suffixes = profile.tabViewSimpleNameSuffixes
-                val phSuffix = profile.placeholderSuffix
-                actCls.getDeclaredMethod("onAttachedToWindow").let { base ->
-                    base.isAccessible = true
-                    b.hookAfter(base) { f ->
-                        val v = f.thisObject as? View ?: return@hookAfter
-                        val sn = v.javaClass.simpleName
-                        if (suffixes.any { sn.endsWith(it) } ||
-                            (phSuffix != null && sn.endsWith(phSuffix))
-                        ) BarState.registerHidden(v)
+                runCatching {
+                    val g1Name = "com.xunmeng.pinduoduo.ui_home_activity.widget.tab.PddTabView" + "$" + "g_1"
+                    val g1 = cl.loadClass(g1Name)
+                    val m = tabCls2.methods.first { it.name == "setOnTabChangeListener" }
+                    b.hookAfter(m) { f ->
+                        val orig = f.args.getOrNull(0) ?: return@hookAfter
+                        if (java.lang.reflect.Proxy.isProxyClass(orig.javaClass)) return@hookAfter
+                        BarState.bindListener(orig, g1)
                     }
-                }
-            }.onFailure { fail("resume-scan", it) }
+                    ok()
+                }.onFailure { fail("pdd-g1", it) }
+            }
+
+            // ═══════════ 哔哩哔哩 ═══════════
+            "tv.danmaku.bili" -> {
+                runCatching {
+                    val actCls = cl.loadClass("android.app.Activity")
+                    val onResume = actCls.getDeclaredMethod("onResume")
+                    onResume.isAccessible = true
+                    b.hookAfter(onResume) { f ->
+                        val act = f.thisObject as? Activity ?: return@hookAfter
+                        if (!act.javaClass.name.startsWith("tv.danmaku.bili")) return@hookAfter
+                        act.window?.decorView?.postDelayed({
+                            runCatching { com.pdd.glassbar.ui.GlassOverlay.installByScan(act, profile) }
+                                .onFailure { b.log(it) }
+                        }, 1500L)
+                    }
+                    ok()
+                }.onFailure { fail("bili-resume", it) }
+            }
         }
     }
 }
