@@ -49,14 +49,15 @@ object GlassLoader {
     fun bootstrap(profile: AppProfile, b: HookBridge) {
         synchronized(this) {
             if (installed) return
-            this.profile = profile
-            this.bridge = b
-        }
-        try {
+            // 实验性配置先于 installed 标记检查 —— 跳过时不得占用幂等位
             if (profile.experimental) {
                 b.log("experimental profile skipped: " + profile.packageName)
                 return
             }
+            this.profile = profile
+            this.bridge = b
+        }
+        try {
             com.pdd.glassbar.core.GlassBarHooks.install(b, profile)
             b.log("GlassBar hooks installed (" + profile.label + ")")
         } catch (t: Throwable) {
@@ -64,6 +65,11 @@ object GlassLoader {
         }
     }
 
+    fun bootstrapRecon(pkg: String, b: HookBridge) {
+        synchronized(this) { if (installed) return; installed = true }
+        b.log("recon-mode for " + pkg)
+        com.pdd.glassbar.core.Recon.install(b)
+    }
+
     fun bootstrapPdd(b: HookBridge) =
-        bootstrap(com.pdd.glassbar.core.AppProfiles.forPackage("com.xunmeng.pinduoduo")!!, b)
-}
+        bootstrap(com.pdd.glassbar.core.AppProfiles.forPackage("com.xunmeng.pinduoduo")!!, b)}

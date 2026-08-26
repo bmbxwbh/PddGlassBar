@@ -9,7 +9,11 @@ class LegacyEntry : IXposedHookLoadPackage, IXposedHookZygoteInit {
     override fun initZygote(startupParam: IXposedHookZygoteInit.StartupParam) {}
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
-        val p = com.pdd.glassbar.core.AppProfiles.forPackage(lpparam.packageName) ?: return
+        val p = com.pdd.glassbar.core.AppProfiles.forPackage(lpparam.packageName)
+        if (p == null) {
+            GlassLoader.bootstrapRecon(lpparam.packageName, LegacyBridge(lpparam.classLoader))
+            return
+        }
         GlassLoader.bootstrap(p, LegacyBridge(lpparam.classLoader))
     }
 }

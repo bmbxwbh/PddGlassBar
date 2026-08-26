@@ -12,7 +12,11 @@ class LxpEntry : XposedModule() {
     override fun onModuleLoaded(param: ModuleLoadedParam) {}
 
     override fun onPackageReady(param: PackageReadyParam) {
-        val p = AppProfiles.forPackage(param.packageName) ?: return
+        val p = AppProfiles.forPackage(param.packageName)
+        if (p == null) {
+            GlassLoader.bootstrapRecon(param.packageName, LxpBridge(this, param.classLoader))
+            return
+        }
         if (!param.isFirstPackage) return
         GlassLoaderBootstrap.bootstrap(this, param, p)
     }
