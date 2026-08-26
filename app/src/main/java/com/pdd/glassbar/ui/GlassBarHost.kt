@@ -1,11 +1,7 @@
 package com.pdd.glassbar.ui
 
-import android.view.View
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
-import androidx.compose.material3.Icon
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.WindowInsets
@@ -22,99 +18,104 @@ import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.pdd.glassbar.ui.content.FloatingBottomBar
 import com.pdd.glassbar.ui.content.FloatingBottomBarDefaults
 import com.pdd.glassbar.ui.content.FloatingBottomBarMode
 import com.pdd.glassbar.ui.content.rememberViewBackdrop
+import kotlinx.coroutines.delay
 
 private val PDD_RED = Color(0xFFE02E24)
-private val LIGHT_UNSELECTED = Color(0xFF000000)   // 浅色: 纯黑
-private val DARK_UNSELECTED = Color(0xFFF2F2F2)    // 深色: 白带点灰
 private val DARK_BG = Color(0xFF191919)
 private val LIGHT_BG = Color(0xFFF7F7F7)
+private val LIGHT_UNSELECTED = Color(0xFF000000)
+private val DARK_UNSELECTED = Color(0xFFF2F2F2)
 
 @Composable
 fun GlassBarHost(sourceView: View) {
     val dark = isSystemInDarkTheme()
+    val glassUsable = GlassFlags.glass && sourceView != null
+    val owner = LocalLifecycleOwner.current
+
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            BarState.reassertHidden()
+        }
+    }
 
     MaterialTheme(
-        colorScheme = if (dark) {
+        colorScheme = if (dark)
             darkColorScheme(primary = PDD_RED, background = DARK_BG)
-        } else {
+        else
             lightColorScheme(primary = PDD_RED, background = LIGHT_BG)
-        },
     ) {
         Box(modifier = Modifier.fillMaxWidth()) {
+
+            // 周期性再透明化看门狗
             LaunchedEffect(Unit) {
                 while (true) {
-                    kotlinx.coroutines.delay(1000)
+                    delay(1000)
                     BarState.reassertHidden()
                 }
             }
-            if (BarState.tabs.isNotEmpty()) FloatingBottomBar(
-                items = BarState.tabs.toList(),
-                selectedIndex = { BarState.selected },
-                onSelected = { index -> BarState.requestSelect(index) },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(
-                        bottom = 12.dp +
-                            WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding(),
+
+            if (BarState.tabs.isNotEmpty() &&
+                (glassUsable || !GlassFlags.glass)) {
+
+                FloatingBottomBar(
+                    items = BarState.tabs.toList(),
+                    selectedIndex = { BarState.selected },
+                    onSelected = { idx -> BarState.requestSelect(idx) },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(
+                            bottom = 12.dp +
+                                WindowInsets.navigationBars.asPaddingValues()
+                                    .calculateBottomPadding()
+                        ),
+                    backdrop = rememberViewBackdrop(sourceView ?: LocalView.current, owner),
+                    mode = if (glassUsable) FloatingBottomBarMode.LiquidGlass
+                           else FloatingBottomBarMode.None,
+                    colors = FloatingBottomBarDefaults.colors(
+                        containerColor = if (dark) DARK_BG else LIGHT_BG,
+                        indicatorColor = PDD_RED,
+                        contentColor = if (dark) DARK_UNSELECTED else LIGHT_UNSELECTED,
+                        activeContentColor = PDD_RED,
                     ),
-                backdrop = rememberViewBackdrop(sourceView, LocalLifecycleOwner.current),
-                mode = if (GlassFlags.glass) FloatingBottomBarMode.LiquidGlass else FloatingBottomBarMode.None,
-                colors = FloatingBottomBarDefaults.colors(
-                    containerColor = if (dark) DARK_BG else LIGHT_BG,
-                    indicatorColor = PDD_RED,
-                    contentColor = if (dark) DARK_UNSELECTED else LIGHT_UNSELECTED,
-                    activeContentColor = PDD_RED,
-                ),
-                liquidGlassBlurRadius = 18.dp,
-                dynamicGravityHighlight = true,
-                iconContent = { item, index ->
-                    val isSelected = index == BarState.selected
-                    BadgedBox(
-                        badge = {
-                            if (!isSelected && BarState.dots.getOrNull(index) == true) {
+                    liquidGlassBlurRadius = 18.dp,
+                    dynamicGravityHighlight = glassUsable,
+                    iconContent = { item, index ->
+                        val isSelected = index == BarState.selected
+                        BadgedBox(badge = {
+                            if (!isSelected &&
+                                BarState.dots.getOrNull(index) == true
+                            ) {
                                 Badge(containerColor = Color(0xFFFF3B30))
                             }
-                        },
-                    ) {
-                        Crossfade(
-                            targetState = isSelected,
-                            animationSpec = tween(200),
-                            label = "pddTabIcon",
-                        ) { sel ->
-                            val nativeBmp = BarState.nativeIcon(index)
-                            when {
-                                nativeBmp != null -> Image(
-                                    bitmap = nativeBmp,
-                                    contentDescription = item.title,
-                                    modifier = Modifier.size(26.dp),
-                                    contentScale = ContentScale.Fit,
-                                )
-                                else -> Icon(
+                        }) {
+                            Crossfade(targetState = isSelected,
+                                      animationSpec = tween(200),
+                                      label = "icon") { sel ->
+                                Icon(
                                     imageVector = PddIcons.icon(item.group, sel),
                                     contentDescription = item.title,
-                                    modifier = Modifier.size(26.dp),
+                                    modifier = Modifier.size(26.dp)
                                 )
                             }
                         }
-                    }
-                },
-                labelContent = { item, _ ->
-                    Text(text = item.title, fontSize = 11.sp, maxLines = 1)
-                },
-            )
+                    },
+                    labelContent = { item, _ ->
+                        Text(text = item.title, fontSize = 11.sp, maxLines = 1)
+                    },
+                )
+            }
         }
     }
 }
