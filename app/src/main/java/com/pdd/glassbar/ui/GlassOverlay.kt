@@ -22,16 +22,25 @@ import java.io.File
  * 纯镜像安装器(Profile 驱动):
  *  - 原生三件套 alpha=0 透明化(保留布局供合成触摸; 看门狗再声明);
  *  - 任何失败自动恢复 alpha 并移除半成品;
- *  - 停机开关 /sdcard/pddglassbar.disable(noglass/noicons 分级)。
+ *  - 停机开关: 应用专属外部目录或私有目录下 pddglassbar.disable(noglass/noicons 分级)。
  */
 object GlassOverlay {
 
     const val TAG = "pdd_glass_bar_compose"
-    private val KILL_SWITCH = File("/sdcard/pddglassbar.disable")
+    private fun killSwitchFiles(activity: Activity?): List<File> = buildList {
+        activity?.getExternalFilesDir(null)?.let { add(File(it, "pddglassbar.disable")) }
+        activity?.let { add(File(it.filesDir, "pddglassbar.disable")) }
+        add(File("/sdcard/pddglassbar.disable")) // 兼容旧文档
+    }
+
+    private fun loadFlag(activity: Activity?): String {
+        val f = killSwitchFiles(activity).firstOrNull { it.exists() } ?: return "on"
+        return GlassFlags.load(f)
+    }
 
     fun install(container: ViewGroup, profile: AppProfile, activity: Activity?) {
         val log = { stage: String -> runCatching { GlassLoader.bridge.log("install/$stage") } }
-        val flag = GlassFlags.load(KILL_SWITCH)
+        val flag = loadFlag(activity)
         if (flag != "on" && flag != "noglass" && flag != "noicons") { log("kill-switch($flag)/skip"); return }
         if (container.findViewWithTag<View>(TAG) != null) return
         runCatching { ModuleFileLog.init(container.context) }

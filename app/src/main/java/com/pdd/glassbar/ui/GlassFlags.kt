@@ -2,7 +2,7 @@ package com.pdd.glassbar.ui
 
 import java.io.File
 
-/** 运行时分级降密开关。/sdcard/pddglassbar.disable 的内容决定级别: */
+/** 运行时分级降密开关。停机文件内容决定级别(探测路径见 GlassOverlay): */
 object GlassFlags {
     var glass = true    // false => FloatingBottomBarMode.None(无玻璃管线)
     var icons = true    // false => 图标区渲染占位

@@ -22,8 +22,11 @@ object CrashCapture {
                     cause = cause.cause
                 }
                 val text = "thread=${t.name}\ne=${e.javaClass.name}: ${e.message}\n\n$sw"
-                runCatching { File(context.filesDir, "pddglassbar-crash.log").writeText(text) }
-                runCatching { File("/sdcard/pddglassbar-crash.log").writeText(text) }
+                val targets = buildList {
+                    add(File(context.filesDir, "pddglassbar-crash.log"))
+                    context.getExternalFilesDir(null)?.let { add(File(it, "pddglassbar-crash.log")) }
+                }
+                targets.forEach { f -> runCatching { f.writeText(text) } }
                 runCatching { GlassLoader.bridge.log("UNCAUGHT ${e.javaClass.name}: ${e.message}") }
                 runCatching { ModuleFileLog.write(text) }
             }
