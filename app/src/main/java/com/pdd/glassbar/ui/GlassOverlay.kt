@@ -10,6 +10,7 @@ import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.lifecycle.setViewTreeViewModelStoreOwner
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
+import com.pdd.glassbar.ui.utils.setLifecycleOwner
 import com.pdd.glassbar.core.AppProfile
 import com.pdd.glassbar.core.TabMatchMode
 import com.pdd.glassbar.loader.GlassLoader
@@ -66,7 +67,7 @@ object GlassOverlay {
         if (tabViews.isEmpty()) { log("scan-no-match"); return }
         tabViews.sortBy { it.x + it.left.toFloat() }
 
-        activate(decor as ViewGroup, profile, activity, null, tabViews.first(), tabViews.toList())
+        activate(decor as ViewGroup, profile, activity, decor as? ViewGroup, tabViews.firstOrNull() ?: return, tabViews.toList())
     }
 
     private fun checkFlag(): Boolean {
